@@ -68,13 +68,14 @@ EchoPass/
 │   └── LOCAL_QUICKSTART.md       # 各平台最短启动（macOS / Linux / Windows）
 ├── config/
 │   └── prod.yaml.example         # 去敏配置模板；本地复制为 prod.yaml
-├── environment.yml               # Windows conda 基础环境定义
+├── environment.yml               # 可选：手动 conda env create 时参考（含 openssl）
 ├── requirements.txt              # 运行依赖
 ├── pyproject.toml                # 包元信息（可选，便于 pip install -e .）
 ├── scripts/
 │   ├── first-run-mac.sh          # macOS：在 conda activate echopass 后首次装依赖
-│   ├── run.bat                   # Windows 双击启动入口
-│   ├── run.ps1                   # Windows 本地启动脚本
+│   ├── first-run-windows.ps1     # Windows：同上
+│   ├── first-run-windows.bat
+│   ├── run.ps1                   # Windows 启动（与 run.sh 对齐）
 │   └── run.sh                    # macOS/Linux 启动脚本
 ├── sql/
 │   ├── schema.sql                # PostgreSQL 建表
@@ -539,7 +540,7 @@ FORCE_ONLINE=1 ./scripts/run.sh     # 首次
 ./scripts/run.sh
 ```
 
-**Windows**：在项目根目录执行 `.\scripts\run.bat`。脚本会创建/复用 conda 环境 `echopass`（可用 `ECHOPASS_CONDA_ENV` 改名），并按 `environment.yml` + `requirements.txt` 安装依赖；缺少 `config\prod.yaml` 时会从模板生成。
+**Windows**：与 macOS 相同流程——先 `conda create -n echopass python=3.8 -y` 并 `conda activate echopass`，在项目根执行 `.\scripts\first-run-windows.ps1` 安装依赖（可选复制 `config\prod.yaml`），编辑配置后设 `$env:ECHOPASS_CONFIG="config/prod.yaml"`，首次拉模型用 `$env:FORCE_ONLINE="1"; .\scripts\run.ps1`，日常 `.\scripts\run.ps1`。`run.ps1` 与 `run.sh` 一样只启动 uvicorn，不创建 conda、不读 `environment.yml`。
 
 默认监听：
 

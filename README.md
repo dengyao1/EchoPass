@@ -35,7 +35,7 @@ flowchart LR
 ├── README.md
 ├── TECHNICAL_OVERVIEW.md
 ├── Dockerfile
-├── environment.yml
+├── environment.yml               # 可选：手动 conda env 时参考
 ├── requirements.txt
 ├── pyproject.toml
 ├── docs/
@@ -44,8 +44,9 @@ flowchart LR
 │   └── prod.yaml.example          # 模板；本地复制为 prod.yaml 并勿提交密钥
 ├── scripts/
 │   ├── first-run-mac.sh           # macOS：conda activate 后首次装依赖
-│   ├── run.bat
-│   ├── run.ps1
+│   ├── first-run-windows.ps1      # Windows：同上
+│   ├── first-run-windows.bat
+│   ├── run.ps1                   # Windows 启动（与 run.sh 对齐）
 │   ├── run.sh
 │   └── gen_wake_ack_wavs.py
 ├── sql/
@@ -67,17 +68,17 @@ flowchart LR
 
 ## 运行环境
 
-运行时需要 Python **3.8**（与锁定依赖一致）。默认**不**需要数据库。**macOS** 推荐：`conda create -n echopass python=3.8` → `conda activate echopass` → `./scripts/first-run-mac.sh` → 配置 `config/prod.yaml` → `export ECHOPASS_CONFIG=config/prod.yaml` → `./scripts/run.sh`（详见 [docs/LOCAL_QUICKSTART.md](docs/LOCAL_QUICKSTART.md) 的「macOS」）。**Linux** 可用 venv + `scripts/run.sh`。**Windows** 推荐 Miniconda / Anaconda，由 `scripts\run.bat` 处理环境与依赖。
+运行时需要 Python **3.8**（与锁定依赖一致）。默认**不**需要数据库。**macOS**：`conda create -n echopass python=3.8` → `conda activate echopass` → `./scripts/first-run-mac.sh` → 配置 `config/prod.yaml` → `export ECHOPASS_CONFIG=config/prod.yaml` → `./scripts/run.sh`。**Windows**：`conda create` / `activate` 同上 → `.\scripts\first-run-windows.ps1` → 配置 `config\prod.yaml` → `$env:ECHOPASS_CONFIG="config/prod.yaml"` → `.\scripts\run.ps1`（与 `run.sh` 一样只启动服务）。详见 [docs/LOCAL_QUICKSTART.md](docs/LOCAL_QUICKSTART.md)。**Linux** 可用 venv + `scripts/run.sh`。
 
 ## 快速开始
 
 **步骤以 [docs/LOCAL_QUICKSTART.md](docs/LOCAL_QUICKSTART.md) 为准**，此处仅作补充。
 
 - 若 `modelscope` / `funasr` 版本冲突：`pip install --force-reinstall --no-deps modelscope==1.10.0 funasr==1.3.1`
-- **首次**从 ModelScope 等拉取 CAM++/KWS 权重需联网：在已 `export ECHOPASS_CONFIG=config/prod.yaml` 的前提下执行 `FORCE_ONLINE=1 ./scripts/run.sh`（Windows：`$env:FORCE_ONLINE=1; .\scripts\run.bat`）。日常启动见各平台小节。
+- **首次**从 ModelScope 等拉取 CAM++/KWS 权重需联网：在已 `export ECHOPASS_CONFIG=config/prod.yaml` 的前提下执行 `FORCE_ONLINE=1 ./scripts/run.sh`（Windows：`$env:FORCE_ONLINE=1; .\scripts\run.ps1`）。日常启动见各平台小节。
 - 配置优先级：`环境变量` > `ECHOPASS_CONFIG` 指向的 yaml > 仓库模板。未设置 `ECHOPASS_CONFIG` 时默认读取 **`config/prod.yaml.example`**。必配：**火山 `asr.volc.appid` + `token`**、**`llm.api_url` + `api_key` + `model`**；`asr.volc.api=common` 时还要 `cluster`。可选：TTS、`speaker.pg_dsn`（声纹落库）等，见 [config/prod.yaml.example](config/prod.yaml.example)。本地可复制为 `config/prod.yaml` 再 `export ECHOPASS_CONFIG=config/prod.yaml`。
 - 声纹默认在**内存**；要跨重启保留再配 PostgreSQL（`sql/schema.sql` + `pg_dsn`）。
-- Windows 最省事的入口是 `scripts\run.bat`：会先检查 `config\prod.yaml`，缺少时按模板生成；配置就绪后再创建/复用名为 `echopass` 的 conda 环境并安装依赖。若要改环境名，可设 `ECHOPASS_CONDA_ENV`。
+- **Windows** 与 **macOS** 一致：先用 **`first-run-windows.ps1` / `first-run-mac.sh`** 在已 `conda activate` 的 Python 3.8 环境里装依赖；日常只用 **`run.ps1` / `run.sh`** 启动。可选：`environment.yml` 仅供你手动 `conda env create -f` 时参考（非必选）。
 
 ## 使用流程
 
@@ -320,7 +321,7 @@ Windows PowerShell 等价写法：
 
 ```powershell
 $env:FORCE_ONLINE=1
-.\scripts\run.bat
+.\scripts\run.ps1
 ```
 
 ### 3. `modelscope` 在 Python 3.8 上报错
@@ -365,7 +366,7 @@ $env:FORCE_ONLINE=1
 - [docs/LOCAL_QUICKSTART.md](docs/LOCAL_QUICKSTART.md)
 - [config/prod.yaml.example](config/prod.yaml.example)
 - [scripts/first-run-mac.sh](scripts/first-run-mac.sh)
-- [scripts/run.bat](scripts/run.bat)
+- [scripts/first-run-windows.ps1](scripts/first-run-windows.ps1)
 - [scripts/run.ps1](scripts/run.ps1)
 - [scripts/run.sh](scripts/run.sh)
 - [sql/schema.sql](sql/schema.sql)

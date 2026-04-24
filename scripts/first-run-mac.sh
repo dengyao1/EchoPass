@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# EchoPass · Mac 首次准备（conda 方案，在项目根目录执行）
+# EchoPass · macOS 首次准备（conda 方案，在项目根目录执行）
+# Windows 对等脚本：scripts/first-run-windows.ps1（或 first-run-windows.bat）
 #
 # 请先自行建好并进入 Python 3.8 的 conda 环境，例如：
 #   conda create -n echopass python=3.8 -y

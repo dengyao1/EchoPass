@@ -1,3 +1,5 @@
+# 可选：自行 `conda env create -f environment.yml` 时用于带 openssl 等 conda 包。
+# 推荐流程与 macOS 一致：conda create -n echopass python=3.8 → activate → scripts/first-run-*.ps1|sh（仅用 pip 装 requirements.txt）。
 channels:
   - conda-forge
   - defaults

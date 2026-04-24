@@ -2,45 +2,66 @@
 
 环境变量与 YAML 键的对应关系、各模块职责见仓库根目录 [TECHNICAL_OVERVIEW.md](../TECHNICAL_OVERVIEW.md)（§9 配置、§11 启动）。
 
-**需要**：Windows 请安装 **Miniconda / Anaconda**；**macOS 推荐 conda + Python 3.8**（见下文「macOS」）；Linux 可用 **Python 3.8** 与 venv。均需能上网（首次下模型）、火山 ASR 的 `appid`+`token`、任意 **OpenAI 兼容 LLM** 的 `url`+`key`+`model`。**不要**装数据库（默认声纹在内存里）。
+**需要**：**Windows / macOS** 均推荐 **Miniconda/Anaconda + Python 3.8**（见下文）；Linux 可用 **Python 3.8** 与 venv。均需能上网（首次下模型）、火山 ASR 的 `appid`+`token`、任意 **OpenAI 兼容 LLM** 的 `url`+`key`+`model`。**不要**装数据库（默认声纹在内存里）。
 
-## Windows
+## Windows（推荐 conda）
 
-先安装 **Miniconda / Anaconda**。
+本仓库依赖锁定在 **Python 3.8**。请使用 **「Anaconda Prompt」或已初始化 conda 的 PowerShell」**，不要用与项目无关的 Python 3.12+ 直接装依赖。
 
-最省事的方式是直接运行：
-
-```powershell
-cd ECHOPASS
-.\scripts\run.bat
-```
-
-首次运行会自动：
-
-- 若缺少 `config\prod.yaml`，按 `config\prod.yaml.example` 生成模板
-
-如果脚本第一次帮你生成了 `config\prod.yaml`，先把下面这些字段填好，再重新执行一次 `.\scripts\run.bat`：
-
-- `llm.api_url`
-- `llm.api_key`
-- `llm.model`
-- `asr.volc.appid`
-- `asr.volc.token`
-
-配置文件就绪后，脚本会自动：
-
-- 创建或复用 conda 环境 `echopass`
-- 根据 [environment.yml](../environment.yml) 初始化基础环境
-- 安装 `requirements.txt`
-
-如果你想改 conda 环境名，可以先执行：
+### 1. 创建并进入 conda 环境
 
 ```powershell
-$env:ECHOPASS_CONDA_ENV="my-echopass"
-.\scripts\run.bat
+conda create -n echopass python=3.8 -y
+conda activate echopass
+cd C:\path\to\ECHOPASS   # 换成你的克隆目录
 ```
 
-浏览器优先打开 `https://127.0.0.1:8765`；如果机器上没有 `openssl`，脚本会回退到 `http://127.0.0.1:8765`。
+### 2. 首次安装依赖
+
+在**已 `conda activate echopass`** 的前提下执行（脚本只用当前环境的 `python`/`pip`，**不创建 conda 环境、不创建 .venv**）：
+
+```powershell
+.\scripts\first-run-windows.ps1
+```
+
+或双击 / 调用 **`scripts\first-run-windows.bat`**（等价调用上面的 ps1）。
+
+该脚本会：升级 `pip`/`setuptools`/`wheel`、`pip install -r requirements.txt`、固定 `modelscope==1.10.0`；若不存在 `config\prod.yaml` 则从 `prod.yaml.example` 复制一份。
+
+### 3. 填写配置
+
+用记事本或编辑器打开 `config\prod.yaml`，至少填写 **LLM** 与 **火山 ASR**（`llm.api_url` / `api_key` / `model`，`asr.volc.appid` / `token` 等）。字段说明见 [config/prod.yaml.example](../config/prod.yaml.example)。
+
+### 4. 启动服务
+
+```powershell
+conda activate echopass
+cd C:\path\to\ECHOPASS
+$env:ECHOPASS_CONFIG = "config/prod.yaml"
+```
+
+**第一次**从 ModelScope 等拉取 CAM++/KWS 权重需联网：
+
+```powershell
+$env:FORCE_ONLINE = "1"
+.\scripts\run.ps1
+```
+
+缓存齐了之后，日常可直接：
+
+```powershell
+.\scripts\run.ps1
+```
+
+`run.ps1` 与 macOS 的 `run.sh` 一样，只负责设置离线/SSL 并启动 uvicorn，**不**创建 conda、**不**读 `environment.yml` 装依赖。
+
+浏览器打开 **`https://127.0.0.1:8765`**（端口默认 **8765**；自签证书选「继续访问」）。若 PATH 中没有 `openssl`，脚本会以 **HTTP** 启动，以终端提示为准。
+
+### 5. 可选
+
+- **ffmpeg**：若需更好音频兼容，可自行安装并加入 PATH（见项目 README 常见问题）。
+
+---
 
 ## macOS（推荐 conda）
 
@@ -76,7 +97,7 @@ cd /path/to/ECHOPASS
 export ECHOPASS_CONFIG=config/prod.yaml
 ```
 
-**第一次**从 ModelScope 等拉模型权重需要联网，建议：
+**第一次**从 ModelScope 等拉取 CAM++/KWS 权重需要联网，建议：
 
 ```bash
 FORCE_ONLINE=1 ./scripts/run.sh
@@ -104,7 +125,7 @@ cd ECHOPASS
 python3.8 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-cp config/prod.yaml.example config/prod.yaml
+test -f config/prod.yaml || cp config/prod.yaml.example config/prod.yaml
 # 用编辑器打开 prod.yaml，填 llm 与 asr.volc
 export ECHOPASS_CONFIG=config/prod.yaml
 
@@ -129,7 +150,7 @@ asr:
     token: "…"
 ```
 
-第一次下模型失败就再执行：`FORCE_ONLINE=1 ./scripts/run.sh`。Windows PowerShell 对应写法是：`$env:FORCE_ONLINE=1; .\scripts\run.bat`。
+第一次下模型失败就再执行：`FORCE_ONLINE=1 ./scripts/run.sh`。Windows PowerShell 对应写法是：`$env:FORCE_ONLINE=1; .\scripts\run.ps1`。
 日志里「预加载失败: 火山」= ASR 没配对，改完重启。
 
 ### 要让声纹进 PostgreSQL 时
