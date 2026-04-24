@@ -64,10 +64,13 @@ EchoPass/
 ├── TECHNICAL_OVERVIEW.md         # 本文档
 ├── LICENSE                       # MIT
 ├── NOTICE                        # 第三方代码归属（3D-Speaker 等）
+├── environment.yml               # Windows conda 基础环境定义
 ├── requirements.txt              # 运行依赖
 ├── pyproject.toml                # 包元信息（可选，便于 pip install -e .）
 ├── scripts/
-│   └── run.sh                    # uvicorn 启动脚本
+│   ├── run.bat                   # Windows 双击启动入口
+│   ├── run.ps1                   # Windows 本地启动脚本
+│   └── run.sh                    # macOS/Linux 启动脚本
 ├── sql/
 │   ├── schema.sql                # PostgreSQL 建表
 │   └── migrations/
@@ -482,7 +485,7 @@ FastAPI (app.py)
 
 ## 10. 依赖说明
 
-`requirements-demo.txt` 中的依赖可分为几组：
+`requirements.txt` 中的依赖可分为几组：
 
 - Web 服务：
   - `fastapi`
@@ -504,13 +507,27 @@ FastAPI (app.py)
 ### 11.1 本地启动
 
 ```bash
-pip install -r echopass/requirements-demo.txt
-./echopass/run_demo.sh
+python3.8 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp config/prod.yaml.example config/prod.yaml
+export ECHOPASS_CONFIG=config/prod.yaml
+./scripts/run.sh
 ```
 
 默认监听：
 
-- `http://0.0.0.0:8765`
+- `0.0.0.0:8765`
+- 若已有证书或可自动生成自签证书，则优先 `https://127.0.0.1:8765`
+- 否则回退到 `http://127.0.0.1:8765`
+
+Windows 可直接执行：
+
+```powershell
+.\scripts\run.bat
+```
+
+默认会创建/复用 conda 环境 `echopass`，并在该环境里安装 `requirements.txt`。
 
 ### 11.2 HTTPS
 
@@ -519,7 +536,7 @@ pip install -r echopass/requirements-demo.txt
 ```bash
 export SSL_KEYFILE=/path/to/key.pem
 export SSL_CERTFILE=/path/to/cert.pem
-./echopass/run_demo.sh
+./scripts/run.sh
 ```
 
 ## 12. 数据库

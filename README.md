@@ -35,6 +35,7 @@ echopass/
 ├── README.md
 ├── TECHNICAL_OVERVIEW.md
 ├── Dockerfile
+├── environment.yml
 ├── requirements.txt
 ├── pyproject.toml
 ├── docs/
@@ -43,6 +44,8 @@ echopass/
 │   ├── dev.yaml
 │   └── prod.yaml.example
 ├── scripts/
+│   ├── run.bat
+│   ├── run.ps1
 │   ├── run.sh
 │   └── gen_wake_ack_wavs.py
 ├── sql/
@@ -64,7 +67,7 @@ echopass/
 
 ## 运行环境
 
-Python **3.8**，推荐 macOS/Linux。默认**不**需要数据库。其余见 [docs/LOCAL_QUICKSTART.md](docs/LOCAL_QUICKSTART.md)。
+运行时需要 Python **3.8+**。默认**不**需要数据库。macOS/Linux 推荐用 `scripts/run.sh`；Windows 推荐先安装 Miniconda / Anaconda，由 `scripts\run.bat` 自动创建 conda 环境并安装对应 Python。其余见 [docs/LOCAL_QUICKSTART.md](docs/LOCAL_QUICKSTART.md)。
 
 ## 快速开始
 
@@ -73,6 +76,7 @@ Python **3.8**，推荐 macOS/Linux。默认**不**需要数据库。其余见 [
 - 若 `modelscope` / `funasr` 版本冲突：`pip install --force-reinstall --no-deps modelscope==1.10.0 funasr==1.3.1`
 - 配置优先级：`环境变量` > `ECHOPASS_CONFIG` 指向的 yaml > 代码默认。必配：**火山 `asr.volc.appid` + `token`**、**`llm.api_url` + `api_key` + `model`**；`asr.volc.api=common` 时还要 `cluster`。可选：TTS、`speaker.pg_dsn`（声纹落库）等，见 [config/prod.yaml.example](config/prod.yaml.example)。
 - 声纹默认在**内存**；要跨重启保留再配 PostgreSQL（`sql/schema.sql` + `pg_dsn`）。
+- Windows 最省事的入口是 `scripts\run.bat`：会先检查 `config\prod.yaml`，缺少时按模板生成；配置就绪后再创建/复用名为 `echopass` 的 conda 环境并安装依赖。若要改环境名，可设 `ECHOPASS_CONDA_ENV`。
 
 ## 使用流程
 
@@ -312,6 +316,13 @@ Docker 镜像里已经包含：
 FORCE_ONLINE=1 ./scripts/run.sh
 ```
 
+Windows PowerShell 等价写法：
+
+```powershell
+$env:FORCE_ONLINE=1
+.\scripts\run.bat
+```
+
 ### 3. `modelscope` 在 Python 3.8 上报错
 
 优先确认版本是否是 `1.10.0`。更高版本在这个项目当前锁定环境下可能触发兼容问题。
@@ -350,5 +361,7 @@ FORCE_ONLINE=1 ./scripts/run.sh
 
 - [TECHNICAL_OVERVIEW.md](TECHNICAL_OVERVIEW.md)
 - [config/prod.yaml.example](config/prod.yaml.example)
+- [scripts/run.bat](scripts/run.bat)
+- [scripts/run.ps1](scripts/run.ps1)
 - [scripts/run.sh](scripts/run.sh)
 - [sql/schema.sql](sql/schema.sql)
