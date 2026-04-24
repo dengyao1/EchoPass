@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""使用火山双向 TTS 生成唤醒预置语 WAV（读 config/dev.yaml 或 ECHOPASS_CONFIG）。
+"""使用火山双向 TTS 生成唤醒预置语 WAV（读 ECHOPASS_CONFIG 指向的 yaml，未设置则读 config/prod.yaml.example）。
 
 输出到 echopass/static/audio/：
   wake_ack_01_zai_de_qing_shuo.wav  — 在的，请说。

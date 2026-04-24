@@ -9,9 +9,9 @@
 - 可选的 ASR 文本 LLM 纠错
 - 会议纪要自动生成（LLM 结构化输出 + 规则兜底）
 - 唤醒词触发的语音助手（FunASR CTC-KWS）
-- 可选的 TTS 语音播报（OpenAI / CosyVoice）
+- 可选的 TTS 语音播报（火山双向流式 / OpenAI 兼容 HTTP）
 
-后端核心代码位于 `echopass/`，前端单页位于 `echopass/static/`，脚本 `scripts/`，SQL 在 `sql/`。
+后端核心代码位于 `echopass/`，前端单页位于 `echopass/static/`，脚本 `scripts/`，SQL 在 `sql/`。**想先跑起来**请直接看 [docs/LOCAL_QUICKSTART.md](docs/LOCAL_QUICKSTART.md)。
 
 ## 2. 功能清单
 
@@ -64,10 +64,15 @@ EchoPass/
 ├── TECHNICAL_OVERVIEW.md         # 本文档
 ├── LICENSE                       # MIT
 ├── NOTICE                        # 第三方代码归属（3D-Speaker 等）
+├── docs/
+│   └── LOCAL_QUICKSTART.md       # 各平台最短启动（macOS / Linux / Windows）
+├── config/
+│   └── prod.yaml.example         # 去敏配置模板；本地复制为 prod.yaml
 ├── environment.yml               # Windows conda 基础环境定义
 ├── requirements.txt              # 运行依赖
 ├── pyproject.toml                # 包元信息（可选，便于 pip install -e .）
 ├── scripts/
+│   ├── first-run-mac.sh          # macOS：在 conda activate echopass 后首次装依赖
 │   ├── run.bat                   # Windows 双击启动入口
 │   ├── run.ps1                   # Windows 本地启动脚本
 │   └── run.sh                    # macOS/Linux 启动脚本
@@ -115,7 +120,8 @@ FastAPI (app.py)
         ├─ Volcengine Cloud ASR (WebSocket)
         ├─ FunASR KWS
         ├─ OpenAI-compatible LLM
-        └─ OpenAI/CosyVoice-compatible TTS
+        ├─ Volcengine bidirectional streaming TTS（默认）
+        └─ OpenAI-compatible HTTP TTS（可选）
 ```
 
 ## 5. 核心模块说明
@@ -124,7 +130,7 @@ FastAPI (app.py)
 
 职责：
 
-- 读取环境变量并创建全局单例
+- 读取 **`ECHOPASS_CONFIG` 指向的 YAML**（未设置时读 `config/prod.yaml.example`）与环境变量，创建全局单例
 - 初始化 FastAPI、CORS、静态文件挂载
 - 定义全部 REST / WebSocket 接口
 - 负责把引擎能力组合成完整业务流程
@@ -167,7 +173,7 @@ FastAPI (app.py)
 #### `StreamingASREngine`
 
 - 封装火山引擎云端流式 ASR（openspeech v2 WebSocket）
-- 必需环境变量：`SPEAKER_VOLC_ASR_APPID / _TOKEN / _CLUSTER`；启动预加载时校验缺失即抛错
+- 凭据来自 **`asr.volc`（YAML）** 或等价环境变量（如 `SPEAKER_VOLC_ASR_APPID` / `_TOKEN` / `_CLUSTER`）；启动预加载时缺失即抛错（`asr.volc.api=common` 时需 `cluster`，**bigmodel** 可不配 cluster）
 - 每次 `transcribe_chunk` = 一条独立 WS 会话（full client request → 若干 audio-only 分片 → 最后一片带 NEG_SEQUENCE → 收最终带标点文本）
 - 协议和连接细节独立在 [`echopass/volc_asr.py`](echopass/volc_asr.py) 中，WS 通过独立事件循环线程驱动，避免干扰 FastAPI 主 loop
 
@@ -427,13 +433,15 @@ FastAPI (app.py)
 
 ## 9. 配置项
 
+运行时以 **`ECHOPASS_CONFIG` 指向的 YAML**（未设置时默认 `config/prod.yaml.example`）为主；下表为代码中使用的**环境变量名**，多数在 YAML 中有等价键（如 `asr.volc.appid`）。合并规则：**环境变量覆盖 YAML**。
+
 ### 9.1 声纹识别
 
 | 环境变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `SPEAKER_DEMO_THRESHOLD` | `0.45` | 声纹余弦相似度阈值 |
 | `SPEAKER_DEMO_MODEL_ID` | `iic/speech_campplus_sv_zh-cn_16k-common` | CAM++ 模型 ID |
-| `SPEAKER_DEMO_PG_DSN` | `""`（代码与 `config/dev.yaml` 默认） | 为空字符串时只用内存，不做声纹持久化 |
+| `SPEAKER_DEMO_PG_DSN` | `""`（默认配置模板中为空） | 为空字符串时只用内存，不做声纹持久化 |
 
 ### 9.2 ASR / KWS
 
@@ -476,9 +484,7 @@ FastAPI (app.py)
 | `SPEAKER_TTS_API_KEY` | `none` | OpenAI-compatible TTS Key |
 | `SPEAKER_TTS_VOICE` | `default` | TTS voice |
 | `SPEAKER_TTS_MODEL` | `tts-1` | TTS model |
-| `SPEAKER_TTS_PROVIDER` | `cosyvoice` | `openai` 或 `cosyvoice` |
-| `SPEAKER_TTS_USER_ID` | `demo-user` | CosyVoice 用户 ID |
-| `SPEAKER_TTS_PROMPT_CODE` | `P-003` | CosyVoice promptCode |
+| `SPEAKER_TTS_PROVIDER` | `volc_bidirection` | `openai` 或 `volc_bidirection` |
 | `SPEAKER_TTS_PCM_SAMPLE_RATE` | `24000` | PCM 转 WAV 采样率 |
 | `SPEAKER_TTS_PCM_CHANNELS` | `1` | PCM 声道数 |
 | `SPEAKER_TTS_PCM_SAMPLE_WIDTH` | `2` | PCM 采样字节宽度 |
@@ -499,35 +505,47 @@ FastAPI (app.py)
 - 模型与生态：
   - `modelscope`
   - `funasr`
-- 可选持久化：
-  - `psycopg2-binary`
+- 可选持久化（配置了 `speaker.pg_dsn` 时再装，不在默认 `requirements.txt` 中）：
+  - `psycopg2-binary`（`pip install "psycopg2-binary==2.9.10"` 或 `pip install -e ".[postgres]"`）
 
 ## 11. 启动与部署
 
 ### 11.1 本地启动
 
+**各平台逐步说明以 [docs/LOCAL_QUICKSTART.md](docs/LOCAL_QUICKSTART.md) 为准**；此处为摘要。
+
+**macOS（推荐）**：Python **3.8** 与 `requirements.txt` 锁定一致，建议 Miniconda/Anaconda。
+
 ```bash
-python3.8 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp config/prod.yaml.example config/prod.yaml
+conda create -n echopass python=3.8 -y
+conda activate echopass
+cd /path/to/ECHOPASS
+./scripts/first-run-mac.sh          # 装依赖、可选复制 prod.yaml、固定 modelscope
+# 编辑 config/prod.yaml（火山 ASR、LLM 等）
 export ECHOPASS_CONFIG=config/prod.yaml
+FORCE_ONLINE=1 ./scripts/run.sh     # 首次拉 CAM++/KWS 等权重需联网
+./scripts/run.sh                    # 之后日常
+```
+
+**Linux**：可用系统 **Python 3.8** 建 venv（勿用 3.12+ 强装本仓库锁定版本）。
+
+```bash
+cd /path/to/ECHOPASS
+python3.8 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+test -f config/prod.yaml || cp config/prod.yaml.example config/prod.yaml
+export ECHOPASS_CONFIG=config/prod.yaml
+FORCE_ONLINE=1 ./scripts/run.sh     # 首次
 ./scripts/run.sh
 ```
+
+**Windows**：在项目根目录执行 `.\scripts\run.bat`。脚本会创建/复用 conda 环境 `echopass`（可用 `ECHOPASS_CONDA_ENV` 改名），并按 `environment.yml` + `requirements.txt` 安装依赖；缺少 `config\prod.yaml` 时会从模板生成。
 
 默认监听：
 
 - `0.0.0.0:8765`
 - 若已有证书或可自动生成自签证书，则优先 `https://127.0.0.1:8765`
 - 否则回退到 `http://127.0.0.1:8765`
-
-Windows 可直接执行：
-
-```powershell
-.\scripts\run.bat
-```
-
-默认会创建/复用 conda 环境 `echopass`，并在该环境里安装 `requirements.txt`。
 
 ### 11.2 HTTPS
 
@@ -552,10 +570,10 @@ export SSL_CERTFILE=/path/to/cert.pem
 - `created_at`
 - `updated_at`
 
-建表：
+建表（在仓库根目录执行，路径以本仓库为准）：
 
 ```bash
-psql -U <user> -d <db> -f echopass/schema.sql
+psql -U <user> -d <db> -f sql/schema.sql
 ```
 
 ## 13. 当前实现特点与边界
@@ -577,7 +595,6 @@ psql -U <user> -d <db> -f echopass/schema.sql
 
 ## 14. 建议的后续演进方向
 
-- 把环境变量配置从 `app.py` 中抽到独立配置文件
 - 给 ASR 增加更严格的 no-speech 过滤
 - 给转录和纪要增加持久化存储
 - 增加用户/会议维度的多租户隔离

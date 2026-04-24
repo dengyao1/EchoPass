@@ -1,7 +1,8 @@
 """EchoPass 统一配置入口。
 
 设计目标：
-- 把可提交的默认/占位项放在 ``config/dev.yaml``，敏感项用 ``prod.yaml``（不入库）或环境变量覆盖；
+- 仓库内仅保留去敏模板 ``config/prod.yaml.example``；本地复制为 ``config/prod.yaml``（不入库）并填密钥，
+  或通过 ``ECHOPASS_CONFIG`` 指向任意 yaml；敏感项也可用环境变量覆盖。
 - 保留所有历史 ``SPEAKER_*`` 环境变量的覆盖能力（生产/CI 用 env 一键改值）；
 - 业务代码统一调 ``cfg("path.to.field", "ENV_NAME", default, cast=...)``，
   无需关心是 yaml 还是 env 取的。
@@ -12,7 +13,8 @@
     3. 调用方提供的 ``default``
 
 切换文件：
-    export ECHOPASS_CONFIG=/path/to/prod.yaml   # 默认 ``<repo>/config/dev.yaml``
+    cp config/prod.yaml.example config/prod.yaml
+    export ECHOPASS_CONFIG=config/prod.yaml   # 未设置时默认读 ``<repo>/config/prod.yaml.example``
 """
 
 from __future__ import annotations
@@ -25,7 +27,7 @@ from typing import Any, Callable, Optional, TypeVar
 T = TypeVar("T")
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_DEFAULT_PATH = _REPO_ROOT / "config" / "dev.yaml"
+_DEFAULT_PATH = _REPO_ROOT / "config" / "prod.yaml.example"
 
 logger = logging.getLogger("echopass.config")
 

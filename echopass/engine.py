@@ -424,8 +424,9 @@ class StreamingASREngine:
         ]
         if missing:
             raise RuntimeError(
-                "火山引擎 ASR 环境变量缺失：" + ",".join(missing)
-                + "。请先 export 后再启动服务。"
+                "火山引擎 ASR 凭据未配置：请在 config 中填写 asr.volc.appid / asr.volc.token，"
+                "或设置环境变量 " + " / ".join(missing)
+                + "（并确认 ECHOPASS_CONFIG 指向含上述字段的 yaml）。"
             )
 
         if self._api == "bigmodel":

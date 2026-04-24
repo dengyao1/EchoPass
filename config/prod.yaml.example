@@ -50,23 +50,22 @@ kws:
   threshold: 0.75
 
 tts:
-  provider: "cosyvoice"       # cosyvoice | volc_bidirection
-  url: ""                      # ☆ TTS 服务地址（非 volc_bidirection 时必填）
-  api_key: "none"
-  voice: "default"
-  model: "tts-1"
-  user_id: "demo-user"
-  prompt_code: "P-003"
+  # 默认：火山豆包双向流式 TTS V3（凭据可与 asr.volc.appid / token 共用，见下方 volc）
+  provider: "volc_bidirection"   # volc_bidirection | openai
+  url: ""                        # openai 模式必填；火山模式留空即可
+  api_key: "none"                # 仅 openai 模式使用
+  voice: "zh_female_vv_uranus_bigtts"   # 兜底音色；/api/tts 请求体 voice 优先
+  model: "tts-1"                 # 仅 openai 模式使用
   pcm:
     sample_rate: 24000
     channels: 1
     sample_width: 2
   volc:
     ws_url: ""
-    appid: ""
-    access_key: ""
-    # 2.0 音色用 seed-tts-2.0；1.0 公版常用 volc.service_type.10029 / seed-tts-1.0（须与控制台音色列表版本一致）
+    appid: ""                    # 留空则沿用 asr.volc.appid
+    access_key: ""               # 留空则沿用 asr.volc.token
+    # resource_id 须与音色所属模型版本一致：2.0 → seed-tts-2.0；1.0 公版见控制台
     resource_id: "seed-tts-2.0"
-    speaker: ""                # ☆ 豆包音色 ID
-    speech_rate: 0
-    loudness_rate: 0
+    speaker: "zh_female_vv_uranus_bigtts"   # ☆ 豆包音色 ID（控制台复制）
+    speech_rate: 0               # 语速 -50~100
+    loudness_rate: 0             # 音量 -50~100

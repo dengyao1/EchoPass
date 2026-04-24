@@ -24,6 +24,7 @@ env/
 
 # Runtime / artifacts
 pretrained/
+outputs/
 tts_preview.wav
 *.log
 .cache/
@@ -44,7 +45,7 @@ tts_preview.wav
 # Misc
 *.bak
 
-# 含密钥的本地配置不入库（dev.yaml 为去敏模板，可提交）
+# 含密钥的本地配置不入库（prod.yaml.example 为去敏模板，可提交）
 config/prod.yaml
 config/local.yaml
 config/dev.local.yaml

@@ -39,8 +39,10 @@ funasr==1.3.1
 # 重命名为 additional_headers，而我们对两种签名都有兼容，锁 12.0 最稳。
 websockets==12.0
 
-# 声纹持久化（PostgreSQL）；如不使用 PG，启动前 export SPEAKER_DEMO_PG_DSN=''
-psycopg2-binary==2.9.10
+# PostgreSQL 声纹持久化（配置了 speaker.pg_dsn 时）需额外安装驱动，默认不装：
+#   pip install "psycopg2-binary==2.9.10"
+# 或：pip install -e ".[postgres]"（见 pyproject.toml）
+# Apple Silicon + Python 3.8 编译该 wheel 缺失时可能需要 pg_config（conda: libpq；brew: libpq）。
 
 # 配置文件（config/*.yaml）；启动时通过 ECHOPASS_CONFIG 切换
 pyyaml==6.0.1

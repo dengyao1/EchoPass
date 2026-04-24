@@ -43,17 +43,16 @@
 #   export SPEAKER_KWS_KEYWORDS=小云小云
 #   export SPEAKER_KWS_THRESHOLD=0.75
 #
-# TTS 出口（可选，兼容 OpenAI /v1/audio/speech，CosyVoice/ChatTTS 等均可）：
+# TTS：HTTP 模式为 OpenAI 兼容 POST /v1/audio/speech（需配置 SPEAKER_TTS_URL）；
+# 或火山豆包双向流式（见下行）。PCM 转 WAV 参数见 SPEAKER_TTS_PCM_*。
 #   export SPEAKER_TTS_URL=http://your-tts:8080/v1
 #   export SPEAKER_TTS_API_KEY=none
 #   export SPEAKER_TTS_VOICE=default
 #   export SPEAKER_TTS_MODEL=tts-1
-#   export SPEAKER_TTS_PROVIDER=openai                 # openai / cosyvoice
-#   export SPEAKER_TTS_USER_ID=echopass                # cosyvoice body.userID 默认值
-#   export SPEAKER_TTS_PROMPT_CODE=P-001               # cosyvoice body.promptCode 默认值
-#   export SPEAKER_TTS_PCM_SAMPLE_RATE=24000           # cosyvoice PCM 采样率
-#   export SPEAKER_TTS_PCM_CHANNELS=1                  # cosyvoice PCM 声道数
-#   export SPEAKER_TTS_PCM_SAMPLE_WIDTH=2              # cosyvoice PCM 位宽字节数（16bit=2）
+#   export SPEAKER_TTS_PROVIDER=openai                 # openai | volc_bidirection
+#   export SPEAKER_TTS_PCM_SAMPLE_RATE=24000
+#   export SPEAKER_TTS_PCM_CHANNELS=1
+#   export SPEAKER_TTS_PCM_SAMPLE_WIDTH=2
 #
 # 火山豆包「双向流式 TTS」V3（https://www.volcengine.com/docs/6561/1329505）：
 #   export SPEAKER_TTS_PROVIDER=volc_bidirection
@@ -195,7 +194,12 @@ _kws_keywords = cfg("kws.keywords", "SPEAKER_KWS_KEYWORDS", "小云小云", str)
 _kws_threshold = cfg("kws.threshold", "SPEAKER_KWS_THRESHOLD", 0.75, float)
 kws_engine = KWSEngine(keywords=_kws_keywords, threshold=_kws_threshold)
 
-# TTS：默认不连任何内网服务；在 yaml/env 中配置 tts.url 或火山 volc_bidirection 凭据。
+def _normalize_tts_provider(val: object) -> str:
+    s = str(val or "").strip().lower()
+    return s if s in ("openai", "volc_bidirection") else "volc_bidirection"
+
+
+# TTS：默认不连任何内网服务；在 yaml/env 中配置 tts.url（OpenAI 兼容）或火山 volc_bidirection 凭据。
 # tts.url 允许空串，表示未配置 HTTP TTS（例如仅用火山 TTS）。
 _tts_url   = cfg(
     "tts.url", "SPEAKER_TTS_URL",
@@ -205,10 +209,9 @@ _tts_url   = cfg(
 _tts_key   = cfg("tts.api_key",     "SPEAKER_TTS_API_KEY",     "none", str)
 _tts_voice = cfg("tts.voice",       "SPEAKER_TTS_VOICE",       "default", str)
 _tts_model = cfg("tts.model",       "SPEAKER_TTS_MODEL",       "tts-1", str)
-_tts_provider = cfg("tts.provider", "SPEAKER_TTS_PROVIDER",    "cosyvoice",
-                    lambda v: str(v).strip().lower() or "cosyvoice")
-_tts_user_id = cfg("tts.user_id",   "SPEAKER_TTS_USER_ID",     "demo-user", str)
-_tts_prompt_code = cfg("tts.prompt_code", "SPEAKER_TTS_PROMPT_CODE", "P-003", str)
+_tts_provider = cfg(
+    "tts.provider", "SPEAKER_TTS_PROVIDER", "volc_bidirection", _normalize_tts_provider,
+)
 _tts_pcm_sample_rate  = cfg("tts.pcm.sample_rate",  "SPEAKER_TTS_PCM_SAMPLE_RATE",  24000, int)
 _tts_pcm_channels     = cfg("tts.pcm.channels",     "SPEAKER_TTS_PCM_CHANNELS",     1, int)
 _tts_pcm_sample_width = cfg("tts.pcm.sample_width", "SPEAKER_TTS_PCM_SAMPLE_WIDTH", 2, int)
@@ -704,20 +707,16 @@ async def kws(request: Request, sample_rate: int, session_id: str = "default"):
 async def tts_proxy(request: Request):
     """
     将文本转发给配置的 TTS 服务并返回音频流。
-    支持三种协议：
-      1) OpenAI-compatible: /v1/audio/speech
-      2) CosyVoice: /api/v1/agent/voice/tts (userID/ttsText/promptCode)
-      3) 火山豆包双向流式 TTS V3：provider=volc_bidirection（WebSocket BidirectionalTTS）
+    支持两种后端：
+      1) OpenAI 兼容：POST /v1/audio/speech（需配置 tts.url / SPEAKER_TTS_URL）
+      2) 火山豆包双向流式 TTS V3：provider=volc_bidirection（需 tts.volc.* 或与 ASR 共用 appid/token）
     Body:
       {
         "text": "...",
         "voice": "optional",
         "session_id": "optional",
-        "user_id": "optional for cosyvoice",
-        "prompt_code": "optional for cosyvoice",
-        "provider": "optional 覆盖默认 tts.provider"
+        "provider": "optional 覆盖默认 tts.provider（openai | volc_bidirection）"
       }
-    CosyVoice / OpenAI 模式需配置 SPEAKER_TTS_URL；火山模式需 tts.volc.*（或与 ASR 共用 appid/token）。
     """
     import json as _json
     import io as _io
@@ -744,16 +743,12 @@ async def tts_proxy(request: Request):
         raise HTTPException(400, "text 不能为空")
     voice = body.get("voice", _tts_voice)
 
-    user_id = str(body.get("user_id", _tts_user_id)).strip() or _tts_user_id
-    prompt_code = str(body.get("prompt_code", _tts_prompt_code)).strip() or _tts_prompt_code
-    provider = str(body.get("provider", _tts_provider)).strip().lower() or _tts_provider
+    provider = _normalize_tts_provider(str(body.get("provider", _tts_provider)).strip() or _tts_provider)
     logger.info(
-        "tts_proxy called: sid=%s provider=%s text_len=%d user_id=%s prompt_code=%s",
+        "tts_proxy called: sid=%s provider=%s text_len=%d",
         session_id,
         provider,
         len(text),
-        user_id,
-        prompt_code,
     )
 
     if provider == "volc_bidirection":
@@ -814,29 +809,24 @@ async def tts_proxy(request: Request):
         )
 
     if not _tts_url:
-        raise HTTPException(503, "TTS 未配置，请设置环境变量 SPEAKER_TTS_URL")
+        raise HTTPException(
+            503,
+            "OpenAI 兼容 TTS 未配置：请设置 tts.url 或环境变量 SPEAKER_TTS_URL；"
+            "或改用 tts.provider=volc_bidirection 使用火山双向 TTS。",
+        )
 
     url = _tts_url.rstrip("/")
     headers = {"Content-Type": "application/json"}
-    if provider == "cosyvoice":
-        payload = _json.dumps(
-            {
-                "userID": user_id,
-                "ttsText": text,
-                "promptCode": prompt_code,
-            }
-        ).encode()
-    else:
-        payload = _json.dumps(
-            {
-                "model": _tts_model,
-                "input": text,
-                "voice": voice,
-            }
-        ).encode()
-        if not url.endswith("/audio/speech"):
-            url += "/audio/speech"
-        headers["Authorization"] = f"Bearer {_tts_key}"
+    payload = _json.dumps(
+        {
+            "model": _tts_model,
+            "input": text,
+            "voice": voice,
+        }
+    ).encode()
+    if not url.endswith("/audio/speech"):
+        url += "/audio/speech"
+    headers["Authorization"] = f"Bearer {_tts_key}"
     req = _ur.Request(url, data=payload, headers=headers, method="POST")
 
     def _call():
@@ -847,7 +837,7 @@ async def tts_proxy(request: Request):
     audio_bytes, ct = await loop.run_in_executor(None, _call)
     media_type = ct
     filename = "tts.mp3"
-    if provider == "cosyvoice" and "audio/pcm" in (ct or "").lower():
+    if "audio/pcm" in (ct or "").lower():
         audio_bytes = _pcm_to_wav_bytes(audio_bytes)
         media_type = "audio/wav"
         filename = "tts.wav"

@@ -45,7 +45,7 @@ if [[ -n "${SSL_KEYFILE:-}" && -z "${SSL_CERTFILE:-}" ]] || [[ -z "${SSL_KEYFILE
 fi
 if [[ -n "${SSL_KEYFILE:-}" && -n "${SSL_CERTFILE:-}" ]]; then
   if [[ ! -f "$SSL_KEYFILE" || ! -f "$SSL_CERTFILE" ]]; then
-    echo "run.sh: 警告: SSL 文件不存在，已忽略。（SSL_KEYFILE=$SSL_KEYFILE SSL_CERTFILE=$SSL_CERTFILE）" >&2
+    echo "run.sh: 警告: SSL 文件不存在，已忽略。（SSL_KEYFILE=${SSL_KEYFILE} SSL_CERTFILE=${SSL_CERTFILE}）" >&2
     unset SSL_KEYFILE SSL_CERTFILE
   fi
 fi
@@ -103,7 +103,7 @@ fi
 UVICORN_ARGS=(echopass.app:app --host 0.0.0.0 --port "${PORT:-8765}")
 if [[ -n "${SSL_KEYFILE:-}" && -n "${SSL_CERTFILE:-}" ]]; then
   UVICORN_ARGS+=(--ssl-keyfile "$SSL_KEYFILE" --ssl-certfile "$SSL_CERTFILE")
-  echo "run.sh: 启动协议 = HTTPS，监听 0.0.0.0:${PORT:-8765}（--ssl-keyfile=$SSL_KEYFILE）" >&2
+  echo "run.sh: 启动协议 = HTTPS，监听 0.0.0.0:${PORT:-8765}（--ssl-keyfile=${SSL_KEYFILE}）" >&2
 else
   echo "run.sh: 启动协议 = HTTP，监听 0.0.0.0:${PORT:-8765}（未启用 TLS）" >&2
 fi
