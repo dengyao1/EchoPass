@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "echopass"
+version = "0.1.0"
+description = "EchoPass · real-time meeting voice assistant (ASR + speaker id + KWS + LLM + TTS)"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { file = "LICENSE" }
+authors = [{ name = "EchoPass Contributors" }]
+keywords = ["asr", "speaker-recognition", "kws", "meeting-assistant", "funasr", "cam++"]
+classifiers = ["License :: OSI Approved :: MIT License"]
+
+dependencies = [
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.22.0",
+    "python-multipart>=0.0.6",
+    "numpy>=1.20.0",
+    "torch>=1.10.1",
+    "torchaudio>=0.10.1",
+    "soundfile",
+    "modelscope",
+    "funasr",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg2-binary>=2.9.9"]
+
+[project.urls]
+"Technical Overview" = "https://example.internal/echopass/TECHNICAL_OVERVIEW"
+
+[tool.setuptools.packages.find]
+include = ["echopass*"]
+exclude = ["tests*"]
+
+[tool.setuptools.package-data]
+echopass = ["static/*.html", "static/**/*"]

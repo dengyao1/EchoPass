@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+*.whl
+
+# Virtual env
+.venv/
+venv/
+env/
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*~
+
+# macOS
+.DS_Store
+
+# Runtime / artifacts
+pretrained/
+tts_preview.wav
+*.log
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Self-signed certs (放仓库外)
+*.pem
+*.key
+*.crt
+
+# Local env
+.env
+.env.*
+!.env.example
+
+# Misc
+*.bak
+
+# 含密钥的本地配置不入库（dev.yaml 为去敏模板，可提交）
+config/prod.yaml
+config/local.yaml
+config/dev.local.yaml
+config/*.local.yaml

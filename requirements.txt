@@ -1,0 +1,46 @@
+# EchoPass runtime dependencies. 建议 Python 3.8。
+# WebSocket 支持随 uvicorn[standard] 自动安装，LLM/TTS HTTP 调用走标准库 urllib。
+#
+# 版本号锁定为内网生产环境（Python 3.8 + CUDA 12.1）实测可正常加载
+# CAM++ / 火山云端 ASR / KWS 三套模型的组合，升级前请回归测试。
+#
+# ⚠️ 全新环境部署：
+#   modelscope >= 1.11 在 Python 3.8 上有源码语法 bug
+#   （torch_utils.py 用了 PEP 585 的 list[int] 注解，3.8 import 直接报错）。
+#   必须严格安装 1.10.0。如已 pip install funasr 引入了较新 modelscope，
+#   请先 force-reinstall：
+#       pip install --force-reinstall --no-deps modelscope==1.10.0 funasr==1.3.1
+#   然后再 pip install -r requirements.txt 装其余依赖。
+#
+# ⚠️ 火山引擎 ASR 必需环境变量（StreamingASREngine 预加载时会校验）：
+#       export SPEAKER_VOLC_ASR_APPID=...
+#       export SPEAKER_VOLC_ASR_TOKEN=...
+#       export SPEAKER_VOLC_ASR_CLUSTER=...
+
+# Web 层
+fastapi==0.124.4
+uvicorn[standard]==0.33.0
+python-multipart==0.0.20
+
+# 数值 & 音频
+numpy==1.23.5
+torch==2.4.1
+torchaudio==2.4.1
+soundfile==0.13.1
+
+# 模型生态
+#   CAM++（声纹）走 modelscope 下载权重
+#   KWS（关键词唤醒）仍走 funasr；ASR 已切换为火山云端，不再走本地 FunASR
+modelscope==1.10.0
+funasr==1.3.1
+
+# 火山引擎云端 ASR：显式锁 websockets 版本
+# uvicorn[standard] 会带一份 websockets 进来，但版本浮动；13.x 将 extra_headers
+# 重命名为 additional_headers，而我们对两种签名都有兼容，锁 12.0 最稳。
+websockets==12.0
+
+# 声纹持久化（PostgreSQL）；如不使用 PG，启动前 export SPEAKER_DEMO_PG_DSN=''
+psycopg2-binary==2.9.10
+
+# 配置文件（config/*.yaml）；启动时通过 ECHOPASS_CONFIG 切换
+pyyaml==6.0.1

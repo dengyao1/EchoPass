@@ -1,0 +1,56 @@
+# 与 .gitignore 对齐 + docker 特有的忽略项
+# 目标：让 `docker build` 的 build context 尽量小
+
+# VCS / IDE
+.git/
+.gitignore
+.github/
+.idea/
+.vscode/
+.cursor/
+
+# Python runtime
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+*.whl
+
+# 本地虚拟环境
+.venv/
+venv/
+env/
+.python-version
+
+# 缓存 / 模型权重（体积巨大；运行时挂卷即可）
+pretrained/
+.cache/
+*.log
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 自签证书：容器内由 scripts/run.sh 自动生成，不要从宿主带进去
+ssl/
+*.pem
+*.key
+*.crt
+
+# 环境配置（含口令）
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+*.swp
+*~
+
+# Docker 自身
+Dockerfile
+.dockerignore
+.docker_data/
+docker-compose*.yml

@@ -1,0 +1,69 @@
+# EchoPass · 本地开发配置（不含真实密钥，可安全提交）
+# ----------------------------------------------------------------------------
+# 优先级：环境变量 > 本文件 > echopass/config.py 内置默认值
+# 默认 ECHOPASS_CONFIG 指向本文件；生产请 copy prod.yaml.example 为 prod.yaml 并填写。
+# 填密钥建议：cp prod.yaml.example prod.yaml 后 ECHOPASS_CONFIG=config/prod.yaml（prod.yaml 不入库）
+#
+# 说话人数据：开源默认「仅内存、不连 PostgreSQL」。需跨重启保留声纹再填 pg_dsn。
+# ----------------------------------------------------------------------------
+
+speaker:
+  threshold: 0.45
+  model_id: ""        # 空则用 echopass.engine.DEFAULT_MODEL_ID
+  pg_dsn: ""          # 保持空 = 仅内存（开源推荐）；要 PG 时填写 DSN
+
+assistant:
+  ttl_sec: 25
+  wake_ack_audio: "audio/wake_ack_01_zai_de_qing_shuo.wav"
+  meeting_ctx:
+    max_items: 20
+    max_chars: 1500
+
+preload_models: true
+
+llm:
+  api_url: ""         # 例如 https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
+  api_key: ""
+  model: ""           # 例如 qwen-plus
+  asr_correction: false
+
+asr:
+  hotword: ""
+  funasr_base: ""
+  volc:
+    api: "bigmodel"
+    appid: ""
+    token: ""
+    cluster: "volcengine_streaming_common"
+    ws_url: ""
+    resource_id: ""
+    model_name: ""
+    language: ""
+    workflow: ""
+    uid: ""
+    seg_ms: 0
+
+kws:
+  keywords: "小云小云"
+  threshold: 0.75
+
+tts:
+  provider: "cosyvoice"
+  url: ""
+  api_key: "none"
+  voice: "default"
+  model: "tts-1"
+  user_id: "demo-user"
+  prompt_code: "P-003"
+  pcm:
+    sample_rate: 24000
+    channels: 1
+    sample_width: 2
+  volc:
+    ws_url: ""
+    appid: ""
+    access_key: ""
+    resource_id: "seed-tts-2.0"
+    speaker: ""
+    speech_rate: 0
+    loudness_rate: 0

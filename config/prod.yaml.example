@@ -1,0 +1,72 @@
+# EchoPass · 生产环境配置模板
+# ----------------------------------------------------------------------------
+# 复制为 config/prod.yaml 并替换 ☆ 标记的字段，然后启动：
+#   export ECHOPASS_CONFIG=config/prod.yaml
+#   ./scripts/run.sh
+#
+# 任意字段都可以临时被同名 SPEAKER_* 环境变量覆盖。
+# ----------------------------------------------------------------------------
+
+speaker:
+  threshold: 0.45
+  model_id: ""
+  # 留空 = 仅内存（开源/单机默认，重启后已注册声纹不保留）。需要持久化再填 DSN
+  pg_dsn: ""                   # 可选；填 PostgreSQL DSN 时启用声纹表持久化
+
+assistant:
+  ttl_sec: 25
+  # 可选：相对 echopass/static/；仓库内可生成 audio/wake_ack_01…wav ~ 03…wav
+  wake_ack_audio: ""
+  meeting_ctx:
+    max_items: 20
+    max_chars: 1500
+
+preload_models: true
+
+llm:
+  api_url: ""                  # ☆ 例如 https://api.deepseek.com/v1/chat/completions
+  api_key: ""                  # ☆ 自有 LLM Key
+  model: ""                    # ☆ 例如 deepseek-chat / qwen-plus / ep-xxx-xxx
+  asr_correction: false
+
+asr:
+  hotword: ""
+  funasr_base: ""
+  volc:
+    api: "bigmodel"
+    appid: ""                  # ☆ 火山 ASR AppID
+    token: ""                  # ☆ 火山 ASR Access Token
+    cluster: "volcengine_streaming_common"
+    ws_url: ""
+    resource_id: ""
+    model_name: ""
+    language: ""
+    workflow: ""
+    uid: ""
+    seg_ms: 0
+
+kws:
+  keywords: "小云小云"
+  threshold: 0.75
+
+tts:
+  provider: "cosyvoice"       # cosyvoice | volc_bidirection
+  url: ""                      # ☆ TTS 服务地址（非 volc_bidirection 时必填）
+  api_key: "none"
+  voice: "default"
+  model: "tts-1"
+  user_id: "demo-user"
+  prompt_code: "P-003"
+  pcm:
+    sample_rate: 24000
+    channels: 1
+    sample_width: 2
+  volc:
+    ws_url: ""
+    appid: ""
+    access_key: ""
+    # 2.0 音色用 seed-tts-2.0；1.0 公版常用 volc.service_type.10029 / seed-tts-1.0（须与控制台音色列表版本一致）
+    resource_id: "seed-tts-2.0"
+    speaker: ""                # ☆ 豆包音色 ID
+    speech_rate: 0
+    loudness_rate: 0

@@ -1,0 +1,33 @@
+EchoPass
+Copyright 2025 EchoPass Contributors
+
+EchoPass 本体以 MIT License 发布（见仓库根目录 LICENSE）。
+
+本产品还包含以其它许可证发布的第三方代码与模型权重，分项如下。
+
+-------------------------------------------------------------------------------
+3D-Speaker (https://github.com/modelscope/3D-Speaker)
+Copyright Alibaba Group and contributors.
+Licensed under the Apache License, Version 2.0.
+
+以下文件是从 3D-Speaker 提取并裁剪以便在本项目内独立推理使用：
+  - echopass/campplus_model.py   （原 speakerlab 下 CAM++ 网络定义）
+  - echopass/audio_features.py    （Kaldi 风格 fbank 提取器）
+
+默认加载的声纹模型权重也来自 3D-Speaker / ModelScope：
+  iic/speech_campplus_sv_zh-cn_16k-common
+
+-------------------------------------------------------------------------------
+FunASR (https://github.com/modelscope/FunASR)
+Copyright Alibaba Group and contributors.
+Licensed under the MIT License.
+
+作为运行时依赖引入，用于：
+  - ASR（paraformer-zh + fsmn-vad + ct-punc）
+  - KWS（speech_charctc_kws_phone-xiaoyun）
+
+不拷贝源码到本仓库，由 pip 安装。
+
+-------------------------------------------------------------------------------
+Apache License, Version 2.0（适用于上文 3D-Speaker 相关部分）全文见：
+https://www.apache.org/licenses/LICENSE-2.0

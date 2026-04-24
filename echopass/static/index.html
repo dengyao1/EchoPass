@@ -1,0 +1,4270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EchoPass · 实时会议实录</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Orbitron:wght@500;700;800&family=Azeret+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #03010a;
+      --bg-2: #09041b;
+      --panel: rgba(255, 255, 255, 0.06);
+      --panel-soft: rgba(255, 255, 255, 0.04);
+      --panel-strong: rgba(255, 255, 255, 0.12);
+      --border: rgba(255, 255, 255, 0.12);
+      --border-strong: rgba(255, 255, 255, 0.22);
+      --text: #f8f8ff;
+      --text-sub: #d9defa;
+      --muted: #9ea4d6;
+      --cyan: #3df6ff;
+      --violet: #7a5cff;
+      --pink: #ff47c8;
+      --gold: #ffd66b;
+      --green: #74ff8b;
+      --accent: #7a5cff;
+      --accent-2: #3df6ff;
+      --accent-soft: rgba(122, 92, 255, 0.18);
+      --accent-bubble: linear-gradient(135deg, #3df6ff 0%, #7a5cff 50%, #ff47c8 100%);
+      --ok: #74ff8b;
+      --warn: #ffd66b;
+      --danger: #ff6b9b;
+      --shadow-card: 0 30px 60px rgba(0, 0, 0, 0.5), 0 0 42px rgba(122, 92, 255, 0.12);
+      --shadow-fab: 0 0 36px rgba(122, 92, 255, 0.55), 0 10px 34px rgba(255, 71, 200, 0.3);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+      color: var(--text);
+      line-height: 1.5;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 8% 8%, rgba(61, 246, 255, 0.18), transparent 24%),
+        radial-gradient(circle at 92% 12%, rgba(255, 71, 200, 0.18), transparent 22%),
+        radial-gradient(circle at 50% 85%, rgba(122, 92, 255, 0.20), transparent 28%),
+        linear-gradient(135deg, #020106 0%, #060312 35%, #0a0519 65%, #020106 100%);
+    }
+    body::before {
+      content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background:
+        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 44px 44px;
+      mask-image: radial-gradient(circle at center, black 45%, transparent 100%);
+      opacity: 0.34;
+    }
+    body::after {
+      content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background: linear-gradient(180deg, rgba(61,246,255,0.03), transparent 30%, transparent 70%, rgba(255,71,200,0.03));
+      mix-blend-mode: screen;
+    }
+
+    .bg-fx { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+    .noise {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: 0.06;
+      background-image: radial-gradient(rgba(255,255,255,0.9) 0.6px, transparent 0.8px);
+      background-size: 10px 10px; mix-blend-mode: soft-light;
+    }
+    .orb {
+      position: fixed; border-radius: 50%; filter: blur(90px); opacity: 0.28;
+      pointer-events: none; z-index: 0;
+      animation: drift 18s ease-in-out infinite alternate;
+    }
+    .orb.one   { width: 340px; height: 340px; left: -6%;  top: 4%;  background: rgba(61, 246, 255, 0.22); }
+    .orb.two   { width: 420px; height: 420px; right: -10%; top: 10%; background: rgba(255, 71, 200, 0.22); animation-duration: 22s; }
+    .orb.three { width: 380px; height: 380px; left: 28%;  bottom: -14%; background: rgba(122, 92, 255, 0.24); animation-duration: 20s; }
+    .beam {
+      position: fixed; inset: auto -20% 10% -20%; height: 180px; pointer-events: none; z-index: 0;
+      background: linear-gradient(90deg, transparent, rgba(61,246,255,0.10), rgba(255,71,200,0.12), transparent);
+      transform: rotate(-8deg); filter: blur(30px);
+      animation: beamMove 10s linear infinite alternate;
+    }
+    .cursor-glow {
+      position: fixed; width: 360px; height: 360px; border-radius: 50%;
+      pointer-events: none; transform: translate(-50%, -50%);
+      background: radial-gradient(circle, rgba(61,246,255,0.18), rgba(122,92,255,0.14), transparent 68%);
+      filter: blur(14px); z-index: 1; mix-blend-mode: screen;
+      left: -9999px; top: -9999px;
+    }
+
+    @keyframes drift {
+      from { transform: translate3d(0,0,0) scale(1); }
+      to   { transform: translate3d(40px,-30px,0) scale(1.14); }
+    }
+    @keyframes beamMove {
+      from { transform: rotate(-8deg) translateX(-4%); }
+      to   { transform: rotate(-5deg) translateX(4%); }
+    }
+    @keyframes shimmer {
+      from { background-position: 0% 50%; }
+      to   { background-position: 100% 50%; }
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1);    opacity: 0.86; }
+      50%      { transform: scale(1.06); opacity: 1; }
+    }
+
+    button { font-family: inherit; font-size: 0.9rem; color: inherit; }
+    input, textarea { font-family: inherit; font-size: 0.9rem; color: inherit; }
+    a { color: var(--cyan); }
+    .mono { font-family: 'Azeret Mono', ui-monospace, monospace; }
+
+    /* ======== 总体布局 ======== */
+    .app-shell {
+      position: relative;
+      z-index: 2;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      height: 100vh;
+      width: 100vw;
+      padding: 14px 18px 14px;
+      gap: 12px;
+    }
+
+    /* ======== 顶部栏：胶囊 pill ======== */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 18px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(8, 10, 24, 0.62);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255,255,255,0.06);
+    }
+    .brand {
+      display: flex; align-items: center; gap: 14px; min-width: 0;
+    }
+    .brand-mark {
+      width: 40px; height: 40px; border-radius: 12px;
+      display: grid; place-items: center;
+      background: linear-gradient(135deg, var(--cyan), var(--violet), var(--pink));
+      box-shadow: 0 0 30px rgba(122, 92, 255, 0.45);
+      animation: pulse 4.5s ease-in-out infinite;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .brand-mark::before {
+      content: "E"; color: #fff;
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 800; font-size: 18px; letter-spacing: 0.04em;
+      text-shadow: 0 0 12px rgba(255,255,255,0.4);
+    }
+    .header-title {
+      display: flex; flex-direction: column; line-height: 1.1; gap: 4px; min-width: 0;
+    }
+    .brand-name {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 800;
+      font-size: 1.02rem;
+      letter-spacing: 0.14em;
+      background: linear-gradient(135deg, #ffffff 0%, var(--cyan) 42%, var(--violet) 78%, var(--pink) 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      text-shadow: 0 0 24px rgba(61, 246, 255, 0.15);
+    }
+    .header-title .date {
+      font-weight: 800; font-size: 0.82rem; letter-spacing: 0.12em; text-transform: uppercase;
+      background: linear-gradient(135deg, #ffffff 0%, #8cf7ff 45%, #ff89df 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .header-title .date .tag {
+      margin-left: 0.5rem; font-size: 0.72rem; letter-spacing: 0.16em;
+      color: var(--muted); font-weight: 500;
+      -webkit-background-clip: initial; background-clip: initial;
+      background: none; -webkit-text-fill-color: var(--muted);
+    }
+    .header-title .save-status {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      font-size: 0.72rem; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.12em;
+      font-family: 'Azeret Mono', ui-monospace, monospace;
+    }
+    .header-title .save-status .dot {
+      width: 8px; height: 8px; border-radius: 50%; background: var(--muted);
+      box-shadow: 0 0 8px currentColor;
+    }
+    .header-title .save-status.saved .dot { background: var(--green); color: var(--green); }
+    .header-title .save-status.saving .dot { background: var(--pink); color: var(--pink); animation: pulse 1.4s ease-in-out infinite; }
+    .header-actions { display: flex; align-items: center; gap: 0.4rem; }
+    .icon-btn {
+      width: 40px; height: 40px; border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      display: inline-flex; align-items: center; justify-content: center;
+      cursor: pointer; color: var(--text-sub);
+      transition: transform 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+      backdrop-filter: blur(12px);
+    }
+    .icon-btn:hover {
+      color: #fff; border-color: rgba(61, 246, 255, 0.5);
+      box-shadow: 0 0 18px rgba(61, 246, 255, 0.35);
+      transform: translateY(-1px);
+    }
+    .icon-btn.active {
+      color: #fff;
+      border-color: rgba(122, 92, 255, 0.65);
+      background: linear-gradient(135deg, rgba(61,246,255,0.22), rgba(122,92,255,0.32), rgba(255,71,200,0.22));
+      box-shadow: 0 0 24px rgba(122, 92, 255, 0.45);
+    }
+    .icon-btn svg { width: 18px; height: 18px; }
+
+    /* ======== 主区（三栏：音频 / 中部 Tab / AI 问答） ======== */
+    .main {
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr) 340px;
+      gap: 14px;
+      min-height: 0;
+    }
+    @media (max-width: 1200px) {
+      .main { grid-template-columns: 280px minmax(0, 1fr) 300px; }
+    }
+    @media (max-width: 1000px) {
+      .main { grid-template-columns: 1fr; grid-auto-rows: minmax(260px, auto); }
+    }
+
+    .col {
+      position: relative;
+      border-radius: 22px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04));
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      box-shadow: var(--shadow-card);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      display: flex; flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .col::before {
+      content: ""; position: absolute; inset: 0; pointer-events: none;
+      background: radial-gradient(circle at top right, rgba(61,246,255,0.10), transparent 30%);
+    }
+    .col-header {
+      position: relative; z-index: 1;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.95rem 1.2rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .col-header h2 {
+      margin: 0; font-weight: 700; font-size: 0.95rem; letter-spacing: 0.04em;
+      color: #fff;
+    }
+    .col-header h2::before {
+      content: ""; display: inline-block;
+      width: 6px; height: 14px; border-radius: 3px;
+      margin-right: 10px; vertical-align: -2px;
+      background: linear-gradient(180deg, var(--cyan), var(--violet), var(--pink));
+      box-shadow: 0 0 14px rgba(122, 92, 255, 0.6);
+    }
+    .col-header .hint { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+    .col-body {
+      position: relative; z-index: 1;
+      flex: 1 1 auto; min-height: 0;
+      overflow-y: auto;
+      padding: 1rem 1.2rem;
+    }
+    .col-body.no-pad { padding: 0; }
+    .col-body.flex-col { display: flex; flex-direction: column; padding: 0; }
+
+    /* ======== 左栏：气泡式转录 ======== */
+    .transcript-empty {
+      text-align: center; color: var(--muted);
+      font-size: 0.9rem; margin-top: 2.5rem; padding: 1.25rem;
+    }
+    .transcript-empty .emoji {
+      font-size: 2rem; display: block; margin-bottom: 0.75rem;
+      background: linear-gradient(135deg, var(--cyan), var(--violet), var(--pink));
+      -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 0 12px rgba(122, 92, 255, 0.5));
+    }
+    .bubble { display: flex; gap: 0.8rem; padding: 0.55rem 0; }
+    .bubble .avatar {
+      flex: 0 0 auto;
+      width: 38px; height: 38px; border-radius: 50%;
+      color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.85rem; font-weight: 700;
+      box-shadow: 0 0 18px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.1) inset;
+    }
+    .bubble .body {
+      flex: 1 1 auto; min-width: 0;
+      padding: 0.55rem 0.8rem;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .bubble .meta {
+      display: flex; align-items: center; gap: 0.5rem;
+      font-size: 0.72rem; color: var(--muted);
+      margin-bottom: 0.25rem;
+    }
+    .bubble .meta .name { color: #fff; font-weight: 700; font-size: 0.82rem; letter-spacing: 0.02em; }
+    .bubble .meta .badge {
+      font-size: 0.66rem; padding: 1px 6px; border-radius: 999px;
+      background: rgba(61, 246, 255, 0.18); color: var(--cyan);
+      border: 1px solid rgba(61, 246, 255, 0.35);
+      letter-spacing: 0.08em; text-transform: uppercase;
+    }
+    .bubble .text {
+      color: var(--text-sub);
+      font-size: 0.95rem;
+      word-break: break-word; white-space: pre-wrap;
+    }
+    .bubble.current .body {
+      position: relative;
+      background: linear-gradient(135deg, rgba(61,246,255,0.18), rgba(122,92,255,0.32), rgba(255,71,200,0.24));
+      border: 1px solid rgba(255,255,255,0.28);
+      box-shadow: 0 16px 48px rgba(122, 92, 255, 0.32), 0 0 36px rgba(255,71,200,0.18);
+      padding: 0.8rem 1rem;
+    }
+    .bubble.current .body::before {
+      content: ""; position: absolute; inset: -1px; border-radius: inherit;
+      padding: 1px;
+      background: linear-gradient(135deg, rgba(61,246,255,0.8), rgba(122,92,255,0.6), rgba(255,71,200,0.8));
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor; mask-composite: exclude;
+      pointer-events: none;
+    }
+    .bubble.current .meta .name { color: #fff; text-shadow: 0 0 10px rgba(61,246,255,0.5); }
+    .bubble.current .meta .badge { background: rgba(255,255,255,0.22); color: #fff; border-color: rgba(255,255,255,0.35); }
+    .bubble.current .text { color: #fff; min-height: 1.2em; }
+    .bubble.current .dots { display: inline-flex; gap: 4px; align-items: center; }
+    .bubble.current .dots span {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--cyan); opacity: 0.85;
+      box-shadow: 0 0 8px var(--cyan);
+      animation: dotPulse 1.2s infinite ease-in-out;
+    }
+    .bubble.current .dots span:nth-child(2) { animation-delay: 0.18s; background: var(--violet); box-shadow: 0 0 8px var(--violet); }
+    .bubble.current .dots span:nth-child(3) { animation-delay: 0.36s; background: var(--pink); box-shadow: 0 0 8px var(--pink); }
+    @keyframes dotPulse {
+      0%, 60%, 100% { transform: translateY(0);  opacity: 0.4; }
+      30%           { transform: translateY(-3px); opacity: 1; }
+    }
+
+    /* ======== 右栏：AI 纪要 ======== */
+    .summary-toolbar {
+      display: flex; align-items: center; gap: 0.5rem;
+      font-size: 0.78rem; color: var(--muted);
+    }
+    .summary-toolbar button {
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      color: var(--text-sub);
+      padding: 5px 12px; border-radius: 999px;
+      cursor: pointer; font-size: 0.76rem;
+      transition: border-color 0.2s, color 0.2s, box-shadow 0.2s;
+    }
+    .summary-toolbar button:hover {
+      border-color: rgba(61,246,255,0.6); color: #fff;
+      box-shadow: 0 0 14px rgba(61,246,255,0.3);
+    }
+    .summary-toolbar .auto-toggle {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      padding: 4px 10px; border-radius: 999px;
+      border: 1px solid var(--border);
+      cursor: pointer; font-size: 0.74rem;
+      color: var(--text-sub);
+      background: rgba(255,255,255,0.04);
+    }
+    .summary-toolbar .auto-toggle input { accent-color: var(--violet); }
+    .summary-placeholder {
+      color: var(--muted); font-size: 0.9rem;
+      text-align: center; margin-top: 2.5rem; padding: 1.25rem;
+    }
+    .summary-placeholder .emoji {
+      font-size: 2rem; display: block; margin-bottom: 0.75rem;
+      background: linear-gradient(135deg, var(--gold), var(--pink), var(--violet));
+      -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 0 12px rgba(255, 214, 107, 0.4));
+    }
+    .summary-section { margin-bottom: 1.2rem; }
+    .summary-section:last-child { margin-bottom: 0; }
+    .summary-section h3 {
+      font-size: 0.78rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+      margin: 0 0 0.55rem; display: flex; align-items: center; gap: 0.5rem;
+      color: var(--cyan);
+    }
+    .summary-section h3::before {
+      content: ""; width: 4px; height: 14px; border-radius: 2px;
+      background: linear-gradient(180deg, var(--cyan), var(--violet), var(--pink));
+      box-shadow: 0 0 10px rgba(122, 92, 255, 0.6);
+    }
+    .summary-section ul {
+      margin: 0; padding-left: 1.1rem;
+      font-size: 0.88rem; color: var(--text-sub);
+    }
+    .summary-section li { margin-bottom: 0.35rem; line-height: 1.65; }
+    .summary-section li::marker { color: var(--cyan); }
+    .summary-section .summary-text {
+      color: var(--text);
+      font-size: 0.92rem;
+      background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 14px;
+      padding: 0.75rem 0.9rem;
+      line-height: 1.75;
+    }
+    .action-item {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 0.5rem; align-items: center;
+      padding: 0.45rem 0.7rem;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      margin-bottom: 0.45rem;
+      background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+      font-size: 0.85rem; color: var(--text-sub);
+    }
+    .action-item .owner {
+      color: var(--pink); font-size: 0.72rem; letter-spacing: 0.04em;
+    }
+    .action-item .due {
+      color: var(--gold); font-size: 0.72rem; letter-spacing: 0.04em;
+    }
+
+    /* ======== 纪要 · 模块化报告（modules） ======== */
+    .report-hero {
+      padding: 0.85rem 1rem 0.95rem;
+      border-radius: 14px;
+      border: 1px solid rgba(122,92,255,0.28);
+      background:
+        radial-gradient(120% 140% at 0% 0%, rgba(122,92,255,0.18), rgba(0,0,0,0) 55%),
+        linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+      margin-bottom: 0.85rem;
+    }
+    .report-hero .h-title {
+      font-size: 1.05rem; font-weight: 800; color: #fff;
+      line-height: 1.4; margin-bottom: 0.3rem;
+    }
+    .report-hero .h-sub {
+      font-size: 0.8rem; color: var(--text-sub); line-height: 1.6;
+    }
+    .report-module {
+      margin-bottom: 0.85rem;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.015));
+      overflow: hidden;
+    }
+    .report-module .m-head {
+      display: flex; align-items: center; gap: 0.55rem;
+      padding: 0.6rem 0.85rem;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      background: linear-gradient(90deg, rgba(122,92,255,0.10), rgba(122,92,255,0.0));
+    }
+    .report-module .m-no {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 28px; height: 22px; padding: 0 7px;
+      border-radius: 6px;
+      background: rgba(122,92,255,0.18);
+      color: var(--violet);
+      font-family: 'Azeret Mono', ui-monospace, monospace;
+      font-size: 0.74rem; font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .report-module .m-slash { color: rgba(255,255,255,0.25); font-size: 0.78rem; margin: 0 -2px; }
+    .report-module .m-title {
+      font-size: 0.9rem; font-weight: 700; color: #fff;
+      line-height: 1.3;
+    }
+    .report-module .m-intro {
+      padding: 0.55rem 0.85rem 0;
+      font-size: 0.78rem; color: var(--muted);
+      line-height: 1.6;
+    }
+    .report-module .m-body { padding: 0.55rem 0.85rem 0.75rem; }
+
+    /* ─ bullets：图标 + 加粗短词条 + 描述 ─ */
+    .report-bullets { margin: 0; padding: 0; list-style: none; }
+    .report-bullets li {
+      display: grid; grid-template-columns: auto 1fr; gap: 0.6rem;
+      align-items: flex-start;
+      padding: 0.4rem 0; line-height: 1.65;
+      border-bottom: 1px dashed rgba(255,255,255,0.06);
+    }
+    .report-bullets li:last-child { border-bottom: 0; }
+    .report-bullets .dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--violet); box-shadow: 0 0 8px rgba(122,92,255,0.55);
+      margin-top: 0.55rem;
+    }
+    .report-bullets .label {
+      font-weight: 700; color: #fff; font-size: 0.86rem;
+      margin-right: 0.35rem;
+    }
+    .report-bullets .desc {
+      color: var(--text-sub); font-size: 0.84rem;
+    }
+
+    /* ─ table：维度对比表 ─ */
+    .report-table-wrap { overflow-x: auto; }
+    .report-table {
+      width: 100%; border-collapse: collapse;
+      font-size: 0.82rem; color: var(--text-sub);
+    }
+    .report-table th, .report-table td {
+      padding: 0.45rem 0.7rem;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      text-align: left;
+      vertical-align: top;
+      line-height: 1.55;
+    }
+    .report-table th {
+      color: var(--violet);
+      font-weight: 700;
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      background: rgba(122,92,255,0.06);
+      border-bottom: 1px solid rgba(122,92,255,0.25);
+    }
+    .report-table tr:last-child td { border-bottom: 0; }
+    .report-table tbody tr:hover { background: rgba(122,92,255,0.05); }
+    .report-table td:first-child { color: #fff; font-weight: 600; }
+
+    /* ─ actions：行动项卡片 ─ */
+    .report-actions { display: flex; flex-direction: column; gap: 0.45rem; }
+    .report-actions .item {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 0.5rem; align-items: center;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      background: rgba(255,255,255,0.03);
+      font-size: 0.84rem; color: var(--text);
+    }
+    .report-actions .item .task { color: #fff; line-height: 1.55; }
+    .report-actions .item .owner {
+      color: var(--pink); font-size: 0.72rem; letter-spacing: 0.04em;
+      padding: 2px 8px; border-radius: 999px;
+      background: rgba(244,114,182,0.1);
+      border: 1px solid rgba(244,114,182,0.28);
+    }
+    .report-actions .item .due {
+      color: var(--gold); font-size: 0.72rem; letter-spacing: 0.04em;
+      padding: 2px 8px; border-radius: 999px;
+      background: rgba(245,158,11,0.1);
+      border: 1px solid rgba(245,158,11,0.28);
+    }
+
+    /* ─ callout：结论/共识/风险 强调列表 ─ */
+    .report-callout {
+      margin: 0; padding: 0.5rem 0.75rem;
+      list-style: none;
+      border-left: 3px solid var(--violet);
+      background: rgba(122,92,255,0.06);
+      border-radius: 0 10px 10px 0;
+    }
+    .report-callout.is-risk { border-left-color: var(--gold); background: rgba(245,158,11,0.06); }
+    .report-callout li {
+      padding: 0.35rem 0; line-height: 1.65;
+      font-size: 0.85rem; color: var(--text);
+      border-bottom: 1px dashed rgba(255,255,255,0.08);
+    }
+    .report-callout li:last-child { border-bottom: 0; }
+    .report-callout li::before {
+      content: "✦"; color: var(--violet);
+      margin-right: 0.45rem; font-size: 0.78rem;
+    }
+    .report-callout.is-risk li::before { content: "⚠"; color: var(--gold); }
+
+    /* ======== 左栏：整场音频播放器 + 时间戳发言列表 ======== */
+    .audio-panel { padding: 1rem 1.1rem 0.85rem; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .audio-times {
+      display: flex; justify-content: space-between;
+      font-family: 'Azeret Mono', ui-monospace, monospace;
+      font-size: 0.72rem; color: var(--muted); letter-spacing: 0.06em;
+    }
+    .audio-progress {
+      position: relative; height: 28px;
+      display: flex; align-items: center;
+      margin: 6px 0 4px;
+    }
+    .audio-progress .track {
+      position: absolute; left: 0; right: 0; top: 50%;
+      transform: translateY(-50%);
+      height: 4px; border-radius: 999px;
+      background: rgba(255,255,255,0.1);
+      overflow: hidden;
+    }
+    .audio-progress .track .fill {
+      position: absolute; left: 0; top: 0; bottom: 0;
+      width: 0%;
+      background: linear-gradient(90deg, var(--cyan), var(--violet), var(--pink));
+      box-shadow: 0 0 12px rgba(122,92,255,0.5);
+    }
+    .audio-progress input[type="range"] {
+      -webkit-appearance: none; appearance: none;
+      position: relative; z-index: 2;
+      width: 100%; background: transparent; margin: 0; padding: 0;
+      cursor: pointer;
+    }
+    .audio-progress input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 14px; height: 14px; border-radius: 50%;
+      background: #fff;
+      border: 2px solid var(--violet);
+      box-shadow: 0 0 12px rgba(122,92,255,0.8);
+      cursor: pointer;
+    }
+    .audio-progress input[type="range"]::-moz-range-thumb {
+      width: 14px; height: 14px; border-radius: 50%;
+      background: #fff;
+      border: 2px solid var(--violet);
+      box-shadow: 0 0 12px rgba(122,92,255,0.8);
+      cursor: pointer;
+    }
+    .audio-controls {
+      display: flex; align-items: center; justify-content: center;
+      gap: 0.55rem; margin-top: 0.35rem;
+    }
+    .audio-btn {
+      width: 34px; height: 34px; border-radius: 50%;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      color: var(--text-sub);
+      display: inline-flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      transition: transform 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
+      font-size: 0.78rem; font-weight: 600;
+    }
+    .audio-btn:hover {
+      color: #fff; border-color: rgba(61,246,255,0.55);
+      box-shadow: 0 0 14px rgba(61,246,255,0.3);
+      transform: translateY(-1px);
+    }
+    .audio-btn.play {
+      width: 44px; height: 44px;
+      background: linear-gradient(135deg, var(--cyan), var(--violet));
+      border-color: rgba(122,92,255,0.7);
+      color: #fff;
+      box-shadow: 0 0 26px rgba(122,92,255,0.5);
+    }
+    .audio-btn.play:disabled {
+      opacity: 0.4; cursor: not-allowed;
+      background: rgba(255,255,255,0.06);
+      border-color: var(--border);
+      box-shadow: none;
+    }
+    .audio-btn.play svg { width: 16px; height: 16px; }
+    .audio-btn svg { width: 14px; height: 14px; }
+    .audio-speed { font-family: 'Azeret Mono', ui-monospace, monospace; }
+
+    .waveform-wrap {
+      position: relative; height: 56px;
+      margin: 0.25rem -0.25rem 0.55rem;
+      padding: 0 0.25rem;
+    }
+    .waveform-wrap canvas {
+      width: 100%; height: 100%;
+      display: block;
+      border-radius: 10px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
+    }
+    .waveform-empty {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.76rem; color: var(--muted);
+      letter-spacing: 0.04em;
+      pointer-events: none;
+    }
+
+    .timeline-list {
+      padding: 0.65rem 0.85rem 1rem;
+      display: flex; flex-direction: column; gap: 0.45rem;
+    }
+    .timeline-empty {
+      font-size: 0.78rem; color: var(--muted); text-align: center;
+      padding: 1rem 0.5rem;
+    }
+    .timeline-item {
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 0.6rem;
+      padding: 0.5rem 0.55rem;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .timeline-item:hover {
+      background: rgba(255,255,255,0.05);
+      border-color: rgba(255,255,255,0.12);
+    }
+    .timeline-item.active {
+      background: linear-gradient(135deg, rgba(61,246,255,0.12), rgba(122,92,255,0.18));
+      border-color: rgba(122,92,255,0.55);
+      box-shadow: 0 0 18px rgba(122,92,255,0.25);
+    }
+    .timeline-item .avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.78rem; font-weight: 700;
+      box-shadow: 0 0 10px rgba(0,0,0,0.35);
+    }
+    .timeline-item .ti-body { min-width: 0; }
+    .timeline-item .ti-head {
+      display: flex; justify-content: space-between; align-items: baseline;
+      gap: 0.4rem;
+    }
+    .timeline-item .ti-name { color: #fff; font-weight: 600; font-size: 0.82rem; }
+    .timeline-item .ti-time {
+      font-family: 'Azeret Mono', ui-monospace, monospace;
+      color: var(--muted); font-size: 0.72rem; letter-spacing: 0.04em;
+    }
+    .timeline-item .ti-preview {
+      color: var(--text-sub); font-size: 0.76rem;
+      white-space: nowrap; text-overflow: ellipsis; overflow: hidden;
+      margin-top: 0.1rem;
+    }
+
+    /* ======== 中栏 Tab ======== */
+    .tab-bar {
+      display: flex; gap: 0.35rem; padding: 0 1.2rem;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .tab-btn {
+      background: transparent; border: 0; color: var(--muted);
+      padding: 0.8rem 0.35rem; margin-bottom: -1px;
+      font-size: 0.88rem; font-weight: 600; letter-spacing: 0.02em;
+      cursor: pointer; border-bottom: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .tab-btn + .tab-btn { margin-left: 0.9rem; }
+    .tab-btn:hover { color: var(--text-sub); }
+    .tab-btn.active {
+      color: #fff;
+      border-bottom-color: var(--violet);
+    }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* ======== 发言人占比 Tab ======== */
+    .speakers-stats { padding: 0.4rem 0; }
+    .donut-wrap {
+      display: flex; flex-direction: column; align-items: center;
+      margin-bottom: 1rem;
+    }
+    .donut-wrap svg { width: 160px; height: 160px; }
+    .donut-center {
+      text-align: center; margin-top: -110px; pointer-events: none;
+      position: relative; z-index: 2;
+    }
+    .donut-center .total {
+      font-family: 'Azeret Mono', ui-monospace, monospace;
+      font-size: 1.05rem; font-weight: 700; color: #fff;
+    }
+    .donut-center .hint { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+    .donut-spacer { height: 10px; }
+    .speaker-bar {
+      display: grid;
+      grid-template-columns: 34px 1fr auto;
+      gap: 0.6rem; align-items: center;
+      padding: 0.55rem 0.6rem;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      margin-bottom: 0.5rem;
+      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .speaker-bar:hover { border-color: rgba(122,92,255,0.45); background: rgba(255,255,255,0.05); }
+    .speaker-bar.active { border-color: rgba(61,246,255,0.6); box-shadow: 0 0 18px rgba(61,246,255,0.22); }
+    .speaker-bar .avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      color: #fff; font-weight: 700; font-size: 0.78rem;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 0 10px rgba(0,0,0,0.35);
+    }
+    .speaker-bar .info { min-width: 0; }
+    .speaker-bar .info .row1 { display: flex; justify-content: space-between; gap: 0.4rem; }
+    .speaker-bar .name { color: #fff; font-weight: 600; font-size: 0.86rem; }
+    .speaker-bar .pct {
+      font-family: 'Azeret Mono', ui-monospace, monospace;
+      font-size: 0.78rem; color: var(--cyan); font-weight: 700;
+    }
+    .speaker-bar .progress {
+      height: 6px; border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      overflow: hidden; margin-top: 0.35rem;
+    }
+    .speaker-bar .progress .fill { height: 100%; border-radius: inherit; }
+    .speaker-bar .sub {
+      font-family: 'Azeret Mono', ui-monospace, monospace;
+      font-size: 0.7rem; color: var(--muted); margin-top: 0.25rem;
+      letter-spacing: 0.04em;
+    }
+
+    /* ======== 章节 Tab ======== */
+    .chapter-toolbar {
+      display: flex; align-items: center; gap: 0.6rem;
+      padding: 0 0.1rem 0.6rem;
+      border-bottom: 1px dashed rgba(255,255,255,0.08);
+      margin-bottom: 0.6rem;
+    }
+    .chapter-toolbar .meta {
+      font-size: 0.72rem; color: var(--muted);
+      flex: 1;
+    }
+    .chapter-toolbar .meta b { color: rgba(255,255,255,0.78); font-weight: 600; }
+    .chapter-toolbar .btn-gen {
+      appearance: none; border: 1px solid rgba(122,92,255,0.45);
+      background: rgba(122,92,255,0.12); color: var(--violet);
+      font-size: 0.74rem; font-weight: 600;
+      padding: 4px 12px; border-radius: 999px;
+      cursor: pointer; transition: background 0.15s, border-color 0.15s;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .chapter-toolbar .btn-gen:hover:not(:disabled) {
+      background: rgba(122,92,255,0.22); border-color: rgba(122,92,255,0.7);
+    }
+    .chapter-toolbar .btn-gen:disabled { opacity: 0.5; cursor: not-allowed; }
+    .chapter-toolbar .btn-gen .spin {
+      display: inline-block; width: 10px; height: 10px;
+      border: 1.5px solid rgba(122,92,255,0.4);
+      border-top-color: var(--violet);
+      border-radius: 50%; animation: chapter-spin 0.7s linear infinite;
+    }
+    @keyframes chapter-spin { to { transform: rotate(360deg); } }
+
+    .chapter-list { padding: 0.1rem 0; }
+    .chapter-card {
+      position: relative;
+      padding: 0.85rem 0.95rem 0.95rem;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.07);
+      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015));
+      margin-bottom: 0.6rem;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s, transform 0.15s;
+    }
+    .chapter-card:hover {
+      border-color: rgba(122,92,255,0.45);
+      background: rgba(122,92,255,0.06);
+      transform: translateY(-1px);
+    }
+    .chapter-card .head {
+      display: flex; align-items: center; gap: 0.55rem;
+      margin-bottom: 0.45rem; flex-wrap: wrap;
+    }
+    .chapter-card .ts-badge {
+      display: inline-flex; align-items: center;
+      padding: 3px 10px; border-radius: 999px;
+      font-family: 'Azeret Mono', ui-monospace, monospace;
+      font-size: 0.74rem; font-weight: 600;
+      color: rgba(180, 200, 255, 0.95);
+      background: rgba(80, 110, 200, 0.18);
+      border: 1px solid rgba(120, 150, 230, 0.28);
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .chapter-card .ts-badge:hover {
+      background: rgba(80, 110, 200, 0.32);
+      color: #fff;
+    }
+    .chapter-card .ts-badge .play-icon {
+      width: 0; height: 0; margin-right: 5px;
+      border-left: 6px solid currentColor;
+      border-top: 4px solid transparent;
+      border-bottom: 4px solid transparent;
+      opacity: 0; transition: opacity 0.15s;
+    }
+    .chapter-card .ts-badge:hover .play-icon { opacity: 1; }
+    .chapter-card .title {
+      font-size: 0.95rem; color: #fff; font-weight: 700;
+      line-height: 1.35; flex: 1; min-width: 0;
+    }
+    .chapter-card .summary {
+      font-size: 0.82rem; color: rgba(220, 220, 230, 0.78);
+      line-height: 1.65;
+      padding-left: 0.05rem;
+    }
+    .chapter-card .footer {
+      display: flex; align-items: center; gap: 0.5rem;
+      margin-top: 0.55rem;
+      font-size: 0.7rem; color: var(--muted);
+      font-family: 'Azeret Mono', ui-monospace, monospace;
+    }
+    .chapter-card .footer .speakers {
+      color: rgba(180, 200, 255, 0.85);
+      font-family: inherit;
+    }
+    .chapter-card .footer .dot {
+      width: 3px; height: 3px; border-radius: 50%;
+      background: rgba(255,255,255,0.25);
+      display: inline-block;
+    }
+
+    /* ======== 右栏：AI 问答 ======== */
+    .chat-scope {
+      font-size: 0.74rem; color: var(--muted);
+      padding: 0 1.2rem 0.75rem;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .chat-scope .tag-inline {
+      display: inline-block; margin-left: 0.4rem; padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(122,92,255,0.4);
+      color: var(--violet);
+      font-size: 0.7rem; font-weight: 600;
+      background: rgba(122,92,255,0.08);
+    }
+    .chat-chips {
+      display: flex; flex-wrap: wrap; gap: 0.4rem;
+      padding: 0.75rem 1.1rem 0;
+    }
+    .chat-chip {
+      font-size: 0.78rem;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(122,92,255,0.45);
+      background: rgba(122,92,255,0.08);
+      color: #dcdcff;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s, box-shadow 0.15s;
+    }
+    .chat-chip:hover {
+      border-color: rgba(61,246,255,0.7);
+      color: #fff;
+      box-shadow: 0 0 14px rgba(61,246,255,0.25);
+    }
+    .chat-history {
+      flex: 1 1 auto; overflow-y: auto;
+      padding: 0.85rem 1.1rem;
+      display: flex; flex-direction: column; gap: 0.6rem;
+      min-height: 0;
+    }
+    .chat-msg { display: flex; flex-direction: column; max-width: 90%; }
+    .chat-msg.user { align-self: flex-end; }
+    .chat-msg.bot { align-self: flex-start; }
+    .chat-msg .who {
+      font-size: 0.68rem; color: var(--muted);
+      margin-bottom: 3px; letter-spacing: 0.08em; text-transform: uppercase;
+    }
+    .chat-msg.user .who { text-align: right; color: var(--cyan); }
+    .chat-msg .bubble-box {
+      padding: 0.55rem 0.75rem;
+      border-radius: 14px;
+      font-size: 0.88rem;
+      line-height: 1.55;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04);
+      color: var(--text-sub);
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .chat-msg.user .bubble-box {
+      color: #fff;
+      background: linear-gradient(135deg, rgba(61,246,255,0.22), rgba(122,92,255,0.3));
+      border-color: rgba(122,92,255,0.5);
+      border-top-right-radius: 4px;
+    }
+    .chat-msg.bot .bubble-box {
+      border-top-left-radius: 4px;
+    }
+    .chat-msg.bot.typing .bubble-box {
+      color: var(--muted); font-style: italic;
+    }
+    .chat-input-bar {
+      padding: 0.65rem 1rem 0.95rem;
+      border-top: 1px solid rgba(255,255,255,0.08);
+    }
+    .chat-input-bar .row {
+      display: flex; gap: 0.5rem; align-items: center;
+      padding: 0.45rem 0.55rem;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+    }
+    .chat-input-bar input[type="text"] {
+      flex: 1 1 auto; background: transparent;
+      border: 0; outline: 0; color: #fff;
+      font-size: 0.88rem;
+    }
+    .chat-input-bar input::placeholder { color: var(--muted); }
+    .chat-input-bar .send-btn {
+      width: 32px; height: 32px; border-radius: 50%;
+      border: 0; cursor: pointer; color: #fff;
+      background: linear-gradient(135deg, var(--cyan), var(--violet), var(--pink));
+      box-shadow: 0 0 18px rgba(122,92,255,0.45);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-weight: 700;
+    }
+    .chat-input-bar .send-btn:disabled {
+      opacity: 0.4; cursor: not-allowed; box-shadow: none;
+    }
+    .chat-input-bar .options {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.35rem 0.2rem 0;
+      font-size: 0.74rem; color: var(--muted);
+    }
+    .chat-input-bar .chat-wake-hint {
+      display: block; line-height: 1.4; opacity: 0.92;
+    }
+    .chat-input-bar .options label {
+      display: inline-flex; align-items: center; gap: 0.3rem; cursor: pointer;
+    }
+    .chat-input-bar .options input { accent-color: var(--violet); }
+
+    /* 中栏专属：转录 Tab 复用 col-body 滚动 */
+    .tab-pane.scroll-pane {
+      overflow-y: auto; padding: 0.7rem 1.2rem 1rem;
+    }
+
+    /* ======== 底部录音条：胶囊浮动 ======== */
+    .footer-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 20px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(8, 10, 24, 0.62);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255,255,255,0.06);
+      gap: 1rem;
+    }
+    .rec-info { display: flex; align-items: center; gap: 0.9rem; min-width: 0; }
+    .rec-avatar {
+      width: 44px; height: 44px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--cyan), var(--violet), var(--pink));
+      background-size: 200% 200%;
+      color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.1rem;
+      box-shadow: 0 0 28px rgba(122, 92, 255, 0.5);
+      animation: shimmer 6s linear infinite alternate, pulse 4.5s ease-in-out infinite;
+    }
+    .rec-text { display: flex; flex-direction: column; min-width: 0; }
+    .rec-text .status {
+      font-size: 0.85rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .rec-text .status.recording { color: var(--cyan); text-shadow: 0 0 10px rgba(61,246,255,0.55); }
+    .rec-text .status.paused    { color: var(--gold); text-shadow: 0 0 10px rgba(255,214,107,0.5); }
+    .rec-text .status.stopped   { color: var(--muted); }
+    .rec-text .time {
+      color: var(--muted); font-size: 0.78rem; font-variant-numeric: tabular-nums;
+      letter-spacing: 0.04em; font-family: 'Azeret Mono', ui-monospace, monospace;
+    }
+    .rec-controls { display: flex; align-items: center; gap: 0.65rem; }
+    .btn-rec {
+      width: 48px; height: 48px; border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.12);
+      cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s, border-color 0.15s;
+      color: #fff;
+      background: rgba(255,255,255,0.06);
+      backdrop-filter: blur(12px);
+    }
+    .btn-rec:hover { transform: translateY(-1px); }
+    .btn-rec:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .btn-rec.start {
+      background: linear-gradient(135deg, var(--cyan), var(--violet), var(--pink));
+      background-size: 200% 200%;
+      border-color: rgba(255,255,255,0.28);
+      box-shadow: 0 0 32px rgba(122, 92, 255, 0.55);
+      animation: shimmer 6s linear infinite alternate;
+    }
+    .btn-rec.pause {
+      background: rgba(255,214,107,0.14);
+      border-color: rgba(255,214,107,0.45);
+      color: var(--gold);
+      box-shadow: 0 0 14px rgba(255, 214, 107, 0.25);
+    }
+    .btn-rec.stop {
+      background: rgba(255, 107, 155, 0.14);
+      border-color: rgba(255, 107, 155, 0.45);
+      color: var(--danger);
+      box-shadow: 0 0 14px rgba(255, 71, 200, 0.25);
+    }
+    .btn-rec svg { width: 18px; height: 18px; }
+    .btn-rec.start-big { width: 60px; height: 60px; box-shadow: 0 0 42px rgba(122, 92, 255, 0.65); }
+
+    /* ======== 浮动 FAB（小云小云） ======== */
+    .fab {
+      position: fixed;
+      right: 28px; bottom: 120px;
+      z-index: 200;
+      display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
+    }
+    .fab-bubble {
+      background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04));
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 18px;
+      padding: 0.85rem 1rem;
+      box-shadow: 0 18px 42px rgba(0,0,0,0.55), 0 0 32px rgba(122,92,255,0.28);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      max-width: 340px;
+      font-size: 0.85rem;
+      color: var(--text);
+      display: none;
+      position: relative;
+    }
+    .fab-bubble::before {
+      content: ""; position: absolute; inset: -1px; border-radius: inherit;
+      padding: 1px;
+      background: linear-gradient(135deg, rgba(61,246,255,0.8), rgba(122,92,255,0.5), rgba(255,71,200,0.8));
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor; mask-composite: exclude;
+      pointer-events: none;
+    }
+    .fab-bubble.show { display: block; }
+    .fab-bubble .row-user {
+      color: var(--muted); margin-bottom: 0.4rem;
+      display: flex; gap: 0.5rem; align-items: flex-start;
+    }
+    .fab-bubble .row-reply {
+      color: var(--text);
+      display: flex; gap: 0.5rem; align-items: flex-start;
+    }
+    .fab-bubble .who {
+      flex: 0 0 auto; font-weight: 700; font-size: 0.7rem;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      padding: 2px 8px; border-radius: 999px;
+      background: linear-gradient(135deg, rgba(61,246,255,0.2), rgba(122,92,255,0.35));
+      color: #fff; border: 1px solid rgba(255,255,255,0.18);
+    }
+    .fab-bubble .ttsIcon {
+      display: inline-block; margin-left: 0.4rem; color: var(--muted);
+    }
+    .fab-bubble .ttsIcon.playing { color: var(--cyan); text-shadow: 0 0 10px var(--cyan); }
+    .fab-btn {
+      width: 58px; height: 58px; border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.18); cursor: pointer; color: #fff;
+      background: linear-gradient(135deg, #434763, #2a2c44);
+      box-shadow: 0 10px 26px rgba(0,0,0,0.45);
+      display: flex; align-items: center; justify-content: center;
+      position: relative;
+      transition: background 0.3s, transform 0.15s, box-shadow 0.25s;
+    }
+    .fab-btn:hover { transform: translateY(-2px); }
+    .fab-btn svg { width: 24px; height: 24px; }
+    .fab.active .fab-btn {
+      background: linear-gradient(135deg, var(--cyan), var(--violet), var(--pink));
+      background-size: 200% 200%;
+      border-color: rgba(255,255,255,0.32);
+      box-shadow: var(--shadow-fab);
+      animation: shimmer 6s linear infinite alternate;
+    }
+    .fab.active .fab-btn::after {
+      content: ""; position: absolute; inset: -8px; border-radius: 50%;
+      border: 2px solid rgba(61,246,255,0.6);
+      animation: pulseRing 1.8s ease-out infinite;
+    }
+    .fab.woken .fab-btn {
+      background: linear-gradient(135deg, #ff8f43, #ff47c8, #7a5cff);
+      background-size: 200% 200%;
+      animation: shimmer 3s linear infinite alternate;
+      box-shadow: 0 0 44px rgba(255, 71, 200, 0.6);
+    }
+    @keyframes pulseRing {
+      0%   { transform: scale(1);    opacity: 0.7; }
+      100% { transform: scale(1.75); opacity: 0; }
+    }
+    .fab-label {
+      position: absolute;
+      right: 72px; top: 50%; transform: translateY(-50%);
+      font-size: 0.72rem; color: var(--text-sub); letter-spacing: 0.08em;
+      background: rgba(8,10,24,0.8);
+      border: 1px solid var(--border);
+      padding: 4px 10px; border-radius: 999px;
+      white-space: nowrap;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.15s;
+      backdrop-filter: blur(12px);
+      font-family: 'Azeret Mono', ui-monospace, monospace;
+    }
+    .fab-btn:hover + .fab-label { opacity: 1; }
+
+    /* ======== 右侧设置抽屉 ======== */
+    .drawer-overlay {
+      position: fixed; inset: 0;
+      background: rgba(3, 1, 10, 0.6);
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.25s;
+      z-index: 300;
+      backdrop-filter: blur(6px);
+    }
+    .drawer-overlay.show { opacity: 1; pointer-events: auto; }
+    .drawer {
+      position: fixed; top: 0; right: 0; bottom: 0;
+      width: 400px; max-width: 92vw;
+      background:
+        radial-gradient(circle at top right, rgba(255,71,200,0.12), transparent 40%),
+        radial-gradient(circle at bottom left, rgba(61,246,255,0.1), transparent 40%),
+        linear-gradient(180deg, rgba(10, 12, 30, 0.92), rgba(4, 6, 18, 0.94));
+      border-left: 1px solid rgba(255,255,255,0.1);
+      box-shadow: -18px 0 48px rgba(0,0,0,0.6);
+      transform: translateX(100%);
+      transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+      z-index: 310;
+      display: flex; flex-direction: column;
+      backdrop-filter: blur(20px);
+    }
+    .drawer.show { transform: translateX(0); }
+    .drawer-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1rem 1.2rem; border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .drawer-header h2 {
+      margin: 0; font-size: 0.85rem; font-weight: 800;
+      letter-spacing: 0.18em; text-transform: uppercase;
+      background: linear-gradient(135deg, #ffffff, #8cf7ff, #ff89df);
+      -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .drawer-body { flex: 1 1 auto; overflow-y: auto; padding: 1.2rem; }
+    .drawer-section { margin-bottom: 1.6rem; }
+    .drawer-section h3 {
+      font-size: 0.72rem; font-weight: 700; color: var(--cyan);
+      margin: 0 0 0.75rem; text-transform: uppercase; letter-spacing: 0.16em;
+      font-family: 'Azeret Mono', ui-monospace, monospace;
+    }
+    .drawer-section label {
+      display: block; font-size: 0.74rem; color: var(--muted);
+      margin-bottom: 0.3rem; letter-spacing: 0.04em;
+    }
+    .drawer-section input[type="text"],
+    .drawer-section input[type="number"],
+    .drawer-section input[type="file"] {
+      width: 100%; padding: 0.55rem 0.75rem;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 10px;
+      color: var(--text);
+    }
+    .drawer-section input[type="range"] { width: 100%; accent-color: var(--violet); }
+    .drawer-section input:focus {
+      outline: 2px solid rgba(122,92,255,0.35);
+      border-color: rgba(61,246,255,0.5);
+    }
+    .drawer-section .row {
+      display: flex; align-items: center; gap: 0.5rem; margin: 0.5rem 0; flex-wrap: wrap;
+    }
+    .drawer-section .btn {
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.05);
+      color: var(--text);
+      padding: 6px 14px; border-radius: 999px; cursor: pointer;
+      font-size: 0.78rem; letter-spacing: 0.04em;
+      transition: border-color 0.2s, color 0.2s, box-shadow 0.2s, transform 0.15s;
+    }
+    .drawer-section .btn:hover {
+      border-color: rgba(61,246,255,0.55); color: #fff;
+      box-shadow: 0 0 16px rgba(61,246,255,0.28); transform: translateY(-1px);
+    }
+    .drawer-section .btn.primary {
+      background: linear-gradient(135deg, var(--cyan), var(--violet), var(--pink));
+      background-size: 200% 200%;
+      color: #fff; border-color: rgba(255,255,255,0.28);
+      box-shadow: 0 0 22px rgba(122,92,255,0.4);
+      animation: shimmer 6s linear infinite alternate;
+    }
+    .drawer-section .btn.danger {
+      color: var(--danger); border-color: rgba(255, 107, 155, 0.45);
+      background: rgba(255, 107, 155, 0.08);
+    }
+    .tag-row { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    .tag {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      padding: 4px 10px;
+      background: rgba(61, 246, 255, 0.14);
+      color: var(--cyan);
+      border: 1px solid rgba(61, 246, 255, 0.35);
+      border-radius: 999px; font-size: 0.74rem;
+      letter-spacing: 0.04em;
+    }
+    .tag button {
+      border: none; background: transparent; cursor: pointer;
+      color: var(--pink); font-size: 0.78rem;
+    }
+    .health-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+    .health-card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      padding: 0.6rem 0.75rem;
+      font-size: 0.8rem;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    }
+    .health-card .k {
+      color: var(--muted); font-size: 0.68rem; letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .health-card .v { font-weight: 700; color: #fff; margin-top: 0.2rem; font-size: 0.88rem; }
+    .health-card .v.ok   { color: var(--green); text-shadow: 0 0 8px rgba(116,255,139,0.35); }
+    .health-card .v.warn { color: var(--gold);  text-shadow: 0 0 8px rgba(255,214,107,0.35); }
+    .health-card .v.down { color: var(--danger); text-shadow: 0 0 8px rgba(255,107,155,0.4); }
+    details.advanced {
+      border: 1px solid rgba(255,255,255,0.1); border-radius: 12px;
+      padding: 0.55rem 0.8rem;
+      background: rgba(255,255,255,0.03);
+    }
+    details.advanced summary {
+      cursor: pointer; font-size: 0.78rem; color: var(--muted);
+      user-select: none; letter-spacing: 0.08em; text-transform: uppercase;
+    }
+    details.advanced[open] summary { margin-bottom: 0.5rem; color: var(--cyan); }
+
+    /* ======== 滚动条 ======== */
+    .col-body::-webkit-scrollbar,
+    .drawer-body::-webkit-scrollbar { width: 8px; }
+    .col-body::-webkit-scrollbar-thumb,
+    .drawer-body::-webkit-scrollbar-thumb {
+      background: linear-gradient(180deg, rgba(61,246,255,0.4), rgba(122,92,255,0.4), rgba(255,71,200,0.4));
+      border-radius: 4px;
+    }
+    .col-body::-webkit-scrollbar-thumb:hover,
+    .drawer-body::-webkit-scrollbar-thumb:hover {
+      background: linear-gradient(180deg, rgba(61,246,255,0.7), rgba(122,92,255,0.7), rgba(255,71,200,0.7));
+    }
+    .col-body::-webkit-scrollbar-track,
+    .drawer-body::-webkit-scrollbar-track { background: transparent; }
+
+    /* 轻量 toast */
+    .toast {
+      position: fixed; left: 50%; top: 90px; transform: translateX(-50%);
+      background: rgba(8, 10, 24, 0.88);
+      color: #fff;
+      padding: 0.65rem 1.1rem;
+      border-radius: 999px;
+      border: 1px solid rgba(122, 92, 255, 0.4);
+      font-size: 0.82rem; letter-spacing: 0.04em;
+      box-shadow: 0 10px 28px rgba(0,0,0,0.5), 0 0 24px rgba(122, 92, 255, 0.3);
+      backdrop-filter: blur(18px);
+      z-index: 400;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.2s, transform 0.2s;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(4px); }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="cursor-glow" id="cursorGlow"></div>
+  <div class="noise"></div>
+  <div class="orb one"></div>
+  <div class="orb two"></div>
+  <div class="orb three"></div>
+  <div class="beam"></div>
+
+  <div class="app-shell">
+
+    <!-- ═══════════ 顶部栏 ═══════════ -->
+    <header class="header">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"></div>
+        <div class="header-title">
+          <div class="brand-name" title="EchoPass 实时会议助手">EchoPass</div>
+          <div class="date"><span id="headerDate">—</span><span class="tag" id="headerTag">会议实录</span></div>
+          <div id="saveStatus" class="save-status"><span class="dot"></span><span class="label">未开始</span></div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="icon-btn" id="btnToggleRaw" title="显示原始 ASR 文本（对比 LLM 纠错）">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h10M4 17h16"/></svg>
+        </button>
+        <button class="icon-btn" id="btnCopyTranscript" title="复制整段转录">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+        </button>
+        <button class="icon-btn" id="btnExportMd" title="结束录音后可导出会议资料（ZIP：音频 + 转录 + 纪要）" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+            <path d="M14 3v6h6"/>
+            <path d="M11 12h2v2h-2zM11 16h2v2h-2z"/>
+          </svg>
+        </button>
+        <button class="icon-btn" id="btnOpenSettings" title="设置">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.36.16.64.44.82.76.18.32.26.69.18 1.04H21a2 2 0 0 1 0 4h-.09c-.08.35-.02.72.16 1.04Z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- ═══════════ 主区：三栏 ═══════════ -->
+    <main class="main">
+      <!-- ─── 左栏：整场音频播放器 + 时间戳发言人列表 ─── -->
+      <section class="col col-left">
+        <div class="col-header">
+          <h2>会议音频</h2>
+          <span class="hint" id="audioHint">开始录音后自动同步</span>
+        </div>
+        <div class="audio-panel">
+          <div class="audio-times">
+            <span id="audioCur">00:00</span>
+            <span id="audioDur">00:00</span>
+          </div>
+          <div class="audio-progress">
+            <div class="track"><div class="fill" id="audioFill"></div></div>
+            <input type="range" id="audioRange" min="0" max="1000" step="1" value="0" disabled />
+          </div>
+          <div class="waveform-wrap">
+            <canvas id="waveform"></canvas>
+            <div class="waveform-empty" id="waveformEmpty">波形将随录音生成…</div>
+          </div>
+          <div class="audio-controls">
+            <button class="audio-btn" id="btnAudioBack15" title="后退 15s" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></svg>
+              <span style="margin-left:2px;font-size:0.66rem;">15</span>
+            </button>
+            <button class="audio-btn play" id="btnAudioPlay" title="播放 / 暂停" disabled>
+              <svg id="audioPlayIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7L8 5z"/></svg>
+            </button>
+            <button class="audio-btn" id="btnAudioFwd15" title="前进 15s" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+              <span style="margin-left:2px;font-size:0.66rem;">15</span>
+            </button>
+            <button class="audio-btn audio-speed" id="btnAudioSpeed" title="播放速率" disabled>1x</button>
+          </div>
+          <audio id="sessionAudio" preload="auto"></audio>
+        </div>
+        <div class="col-body" id="timelineList">
+          <div class="timeline-empty" id="timelineEmpty">时间戳发言列表将实时出现在这里</div>
+        </div>
+      </section>
+
+      <!-- ─── 中栏：Tab 容器（转录 / AI纪要 / 章节 / 发言人） ─── -->
+      <section class="col col-mid">
+        <div class="col-header">
+          <h2 id="midTitle">实时转录</h2>
+          <div class="summary-toolbar" id="summaryToolbar" style="display:none;">
+            <label class="auto-toggle" title="自动在会议进行中定期刷新纪要">
+              <input type="checkbox" id="summaryAutoToggle" checked />
+              自动
+            </label>
+            <button id="btnSummaryRefresh" title="立即重新生成纪要">立即刷新</button>
+            <span id="summaryLastRefresh">尚未生成</span>
+          </div>
+        </div>
+        <nav class="tab-bar" role="tablist">
+          <button class="tab-btn active" data-tab="transcript" role="tab" aria-selected="true">转录</button>
+          <button class="tab-btn" data-tab="summary" role="tab">AI 纪要</button>
+          <button class="tab-btn" data-tab="chapters" role="tab">章节</button>
+          <button class="tab-btn" data-tab="speakers" role="tab">发言人</button>
+        </nav>
+        <div class="col-body no-pad">
+          <div class="tab-pane active scroll-pane" id="paneTranscript" style="padding:0.7rem 1.2rem;">
+            <div id="transcriptList">
+              <div class="transcript-empty" id="transcriptEmpty">
+                <span class="emoji">🎙️</span>
+                点击下方蓝紫色圆形按钮开始录音
+              </div>
+            </div>
+          </div>
+          <div class="tab-pane scroll-pane" id="paneSummary">
+            <div id="summaryBody">
+              <div class="summary-placeholder" id="summaryPlaceholder">
+                <span class="emoji">📝</span>
+                会议进行中时将由 LLM 自动生成要点、决议与待办
+              </div>
+              <div id="summaryContent" class="hidden"></div>
+            </div>
+          </div>
+          <div class="tab-pane scroll-pane" id="paneChapters">
+            <div class="chapter-toolbar">
+              <div class="meta" id="chapterMeta">点击右侧按钮，让 AI 按话题切分章节并生成精炼标题</div>
+              <button class="btn-gen" id="btnGenChapters" type="button" title="基于当前转录调用 LLM 生成章节">
+                <span id="btnGenChaptersLabel">立即生成</span>
+              </button>
+            </div>
+            <div class="chapter-list" id="chapterList">
+              <div class="summary-placeholder"><span class="emoji">📚</span>开始录音后点击"立即生成"，AI 会按话题切分章节并配上 2-4 句摘要</div>
+            </div>
+          </div>
+          <div class="tab-pane scroll-pane" id="paneSpeakers">
+            <div class="speakers-stats" id="speakersStats">
+              <div class="summary-placeholder"><span class="emoji">🧑‍🤝‍🧑</span>开始录音后，此处将按发言时长自动生成占比</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── 右栏：AI 问答会话 ─── -->
+      <section class="col col-right">
+        <div class="col-header">
+          <h2>AI 问答</h2>
+          <button class="icon-btn" id="btnChatClear" title="清空对话">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+          </button>
+        </div>
+        <div class="chat-scope">问答范围：<span class="tag-inline" id="chatScopeLabel">本场会议</span></div>
+        <div class="chat-chips">
+          <button class="chat-chip" data-chip="highlights">帮我提炼一下重点内容</button>
+        </div>
+        <div class="chat-history" id="chatHistory">
+          <div class="chat-msg bot">
+            <div class="who">小云</div>
+            <div class="bubble-box">👋 Hi，我可以帮你干点什么？</div>
+          </div>
+        </div>
+        <div class="chat-input-bar">
+          <div class="row">
+            <input type="text" id="chatInput" placeholder="有问题尽管问我…" autocomplete="off" />
+            <button class="send-btn" id="chatSend" title="发送">➤</button>
+          </div>
+          <div class="options">
+            <span id="chatWakeState" class="chat-wake-hint">小云小云 · 随会议录音开启唤醒监听</span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ═══════════ 底部录音条 ═══════════ -->
+    <footer class="footer-bar">
+      <div class="rec-info">
+        <div class="rec-avatar">🎤</div>
+        <div class="rec-text">
+          <span class="status stopped" id="recStatus">未开始</span>
+          <span class="time" id="recTimer">00:00:00 / 06:00:00</span>
+        </div>
+      </div>
+      <div class="rec-controls" id="recControls">
+        <button class="btn-rec start start-big" id="btnRecStart" title="开始录音">
+          <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg>
+        </button>
+        <button class="btn-rec pause hidden" id="btnRecPause" title="暂停 / 继续">
+          <svg viewBox="0 0 24 24" fill="currentColor" id="pauseIcon"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+        </button>
+        <button class="btn-rec stop hidden" id="btnRecStop" title="结束录音">
+          <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+        </button>
+      </div>
+    </footer>
+  </div>
+
+  <!-- ═══════════ 右下浮动：保留气泡 DOM 供唤醒流程展示；容器隐藏，唤醒与录音同步不由 FAB 控制 ═══════════ -->
+  <div class="fab" id="fab" style="display:none;">
+    <div class="fab-bubble" id="fabBubble">
+      <div class="row-user"><span class="who">你</span><span id="fabUserText"></span></div>
+      <div class="row-reply"><span class="who">小云</span><span id="fabReplyText"></span><span class="ttsIcon" id="fabTtsIcon" title="TTS 状态">🔈</span></div>
+    </div>
+    <div style="position:relative;">
+      <button type="button" class="fab-btn" id="fabBtn" title="唤醒状态（由会议录音自动控制）" tabindex="-1" aria-hidden="true">
+        <svg id="fabIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+      </button>
+      <span class="fab-label" id="fabLabel">小云小云 · 未启用</span>
+    </div>
+  </div>
+
+  <!-- ═══════════ 设置抽屉 ═══════════ -->
+  <div class="drawer-overlay" id="drawerOverlay"></div>
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <header class="drawer-header">
+      <h2>设置</h2>
+      <button class="icon-btn" id="btnCloseDrawer" title="关闭">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M6 18 18 6"/></svg>
+      </button>
+    </header>
+    <div class="drawer-body">
+      <section class="drawer-section">
+        <h3>服务状态</h3>
+        <div class="health-grid" id="healthGrid"></div>
+        <div class="row" style="margin-top:0.6rem;">
+          <button class="btn" id="btnRefreshHealth">刷新</button>
+          <span id="wsState" style="color:var(--muted);font-size:0.78rem;">WS：未连接</span>
+        </div>
+      </section>
+
+      <section class="drawer-section">
+        <h3>声纹识别</h3>
+        <label>余弦相似度阈值（<span id="settingThresholdVal">0.45</span>）</label>
+        <input type="range" id="settingThreshold" min="0" max="1" step="0.01" value="0.45" />
+        <label style="margin-top:0.6rem;">注册新声纹</label>
+        <input type="text" id="settingEnrollName" placeholder="例如：张三" />
+        <div class="row">
+          <button class="btn" id="btnEnrollRec">录制约 3 秒</button>
+          <button class="btn" id="btnEnrollStop" disabled>停止</button>
+          <span id="enrollRecState" style="color:var(--muted);font-size:0.78rem;"></span>
+        </div>
+        <div class="row">
+          <input type="file" id="settingEnrollFile" accept="audio/*,.wav" />
+          <button class="btn" id="btnEnrollUpload">上传</button>
+        </div>
+        <div id="enrollOut" style="display:none;margin-top:0.4rem;font-size:0.75rem;color:var(--muted);background:var(--panel-soft);border:1px solid var(--border);border-radius:8px;padding:0.4rem;white-space:pre-wrap;"></div>
+        <label style="margin-top:0.6rem;">已注册</label>
+        <div class="tag-row" id="speakerList" style="min-height:1.5rem;"><span style="color:var(--muted);font-size:0.8rem;">（加载中…）</span></div>
+        <div class="row">
+          <button class="btn" id="btnSpeakersRefresh">刷新列表</button>
+        </div>
+      </section>
+
+      <section class="drawer-section">
+        <h3>识别 · 热词</h3>
+        <label>专有名词，空格 / 逗号 / 顿号分隔（下发至火山豆包大模型 ASR）</label>
+        <input type="text" id="settingHotword" placeholder="例如：张三 李四 项目A GPT-5" />
+        <div id="hotwordHint" style="font-size:0.72rem;color:var(--muted);margin-top:0.35rem;">
+          建议 ≤ 50 个词；留空则不启用。热词会作为上下文下发，明显提升会议专有名词命中率。
+        </div>
+      </section>
+
+      <section class="drawer-section">
+        <h3>小云小云 · 唤醒</h3>
+        <label>唤醒词（服务端配置：<span id="settingKwsKeywords">—</span>）</label>
+        <input type="text" id="settingKwsKeywordsInput" disabled style="opacity:0.6;" />
+        <label style="margin-top:0.4rem;">唤醒分数阈值（<span id="settingKwsThresholdVal">0.75</span>）</label>
+        <input type="range" id="settingKwsThreshold" min="0.1" max="1" step="0.05" value="0.75" />
+        <div class="row" style="margin-top:0.4rem;">
+          <label style="margin:0;display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-size:0.82rem;color:var(--text);">
+            <input type="checkbox" id="settingWakeTtsEnabled" checked style="accent-color:var(--accent);" /> 唤醒后自动 TTS 朗读回复
+          </label>
+        </div>
+        <div id="fabDebug" style="margin-top:0.4rem;font-size:0.75rem;color:var(--muted);"></div>
+      </section>
+
+      <section class="drawer-section">
+        <details class="advanced">
+          <summary>高级：VAD 参数</summary>
+          <label>静音触发阈值（RMS）</label>
+          <input type="number" id="settingSilenceThresh" value="0.01" min="0.001" max="0.1" step="0.001" />
+          <label>静音持续（毫秒）</label>
+          <input type="number" id="settingSilenceMs" value="1000" min="200" max="2000" step="100" />
+          <label>最短触发长度（秒）</label>
+          <input type="number" id="settingMinLen" value="2.5" min="0.5" max="5" step="0.5" />
+          <label>最长累计长度（秒）</label>
+          <input type="number" id="settingMaxLen" value="8" min="3" max="20" step="1" />
+        </details>
+      </section>
+    </div>
+  </aside>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ═══════════════════════════════════════════════════
+    // 0) 基础工具
+    // ═══════════════════════════════════════════════════
+    const $ = (id) => document.getElementById(id);
+    const api = (path, opts) => fetch(path, opts).then(async (r) => {
+      const t = await r.text();
+      let j = null;
+      try { j = JSON.parse(t); } catch (_) {}
+      if (!r.ok) throw new Error((j && j.detail) || t || r.statusText);
+      return j;
+    });
+    const pad2 = (n) => String(n).padStart(2, '0');
+    const fmtHMS = (sec) => {
+      sec = Math.max(0, Math.floor(sec));
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const s = sec % 60;
+      return pad2(h) + ':' + pad2(m) + ':' + pad2(s);
+    };
+    function escHtml(s) {
+      return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    function needsSpace(left, right) {
+      if (!left || !right) return false;
+      return /[0-9a-z]$/i.test(left) && /^[0-9a-z]/i.test(right);
+    }
+    function mergeOverlappingText(existing, incoming, minOverlap = 4) {
+      const a = String(existing || '').trim();
+      const b = String(incoming || '').trim();
+      if (!a) return b;
+      if (!b) return a;
+      const tailWindow = a.slice(-Math.max(b.length, 64));
+      if (tailWindow.includes(b)) return a;
+      const maxOverlap = Math.min(a.length, b.length);
+      for (let size = maxOverlap; size >= minOverlap; size--) {
+        if (a.slice(-size) === b.slice(0, size)) {
+          const suffix = b.slice(size).trimStart();
+          if (!suffix) return a;
+          return a + (needsSpace(a, suffix) ? ' ' : '') + suffix;
+        }
+      }
+      return a + (needsSpace(a, b) ? ' ' : '') + b;
+    }
+    function speakerColor(name) {
+      const palette = ['#6b5dff', '#1bbf89', '#f0a929', '#ef5b5b', '#3d9eff', '#d670d6', '#46b7c4', '#8b7ab5'];
+      if (!name || name === '未知' || name === '未知说话人') return '#b4bac7';
+      let h = 0;
+      for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+      return palette[h % palette.length];
+    }
+    function speakerInitial(name) {
+      if (!name) return '?';
+      const s = String(name).trim();
+      if (!s) return '?';
+      const ch = s.charAt(0);
+      return ch.match(/[A-Za-z]/) ? ch.toUpperCase() : ch;
+    }
+    function toast(msg, ms = 1800) {
+      const el = $('toast'); if (!el) return;
+      el.textContent = msg;
+      el.classList.add('show');
+      clearTimeout(toast._t);
+      toast._t = setTimeout(() => el.classList.remove('show'), ms);
+    }
+    function encodeWav(samples, sampleRate) {
+      const buffer = new ArrayBuffer(44 + samples.length * 2);
+      const view = new DataView(buffer);
+      const writeStr = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+      writeStr(0, 'RIFF');
+      view.setUint32(4, 36 + samples.length * 2, true);
+      writeStr(8, 'WAVE'); writeStr(12, 'fmt ');
+      view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+      view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true);
+      view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+      writeStr(36, 'data'); view.setUint32(40, samples.length * 2, true);
+      let off = 44;
+      for (let i = 0; i < samples.length; i++, off += 2) {
+        let s = Math.max(-1, Math.min(1, samples[i]));
+        view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+      }
+      return new Blob([buffer], { type: 'audio/wav' });
+    }
+
+    // ═══════════════════════════════════════════════════
+    // 1) 共享麦克风：多路订阅同一路音频
+    // ═══════════════════════════════════════════════════
+    // 16kHz 统一输出：浏览器侧 AEC/NS/AGC + AudioWorklet 线性降采样（100ms/帧）
+    const sharedMic = (() => {
+      const TARGET_RATE = 16000;
+      const FRAME_SAMPLES = 1600; // 100ms @ 16k
+      let ctx = null, stream = null, srcNode = null, wkNode = null, silentSink = null;
+      const subscribers = new Set();
+
+      const WORKLET_SRC = `
+class PcmResamplerProcessor extends AudioWorkletProcessor {
+  constructor(options) {
+    super();
+    const o = (options && options.processorOptions) || {};
+    this.outRate   = o.targetRate || 16000;
+    this.ratio     = sampleRate / this.outRate;
+    this.prev      = 0;
+    this.srcPos    = 0;
+    this.batchSize = o.batchSize || 1600;
+    this.batch     = new Float32Array(this.batchSize);
+    this.batchPos  = 0;
+  }
+  process(inputs) {
+    const ch = inputs[0] && inputs[0][0];
+    if (!ch || !ch.length) return true;
+    // 线性插值重采样，srcPos 是当前输入 chunk 内虚拟输出采样点的位置
+    while (this.srcPos < ch.length) {
+      const i = Math.floor(this.srcPos);
+      const frac = this.srcPos - i;
+      const a = i < 0 ? this.prev : ch[i];
+      const b = (i + 1) < ch.length ? ch[i + 1] : a;
+      this.batch[this.batchPos++] = a * (1 - frac) + b * frac;
+      if (this.batchPos >= this.batchSize) {
+        const out = new Float32Array(this.batchSize);
+        out.set(this.batch);
+        this.port.postMessage(out, [out.buffer]);
+        this.batchPos = 0;
+      }
+      this.srcPos += this.ratio;
+    }
+    this.srcPos -= ch.length;
+    this.prev = ch[ch.length - 1];
+    return true;
+  }
+}
+registerProcessor('pcm-resampler', PcmResamplerProcessor);
+`;
+
+      async function ensure() {
+        if (ctx) return ctx;
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error('当前浏览器不支持麦克风采集接口');
+        }
+        if (!window.isSecureContext) {
+          throw new Error('当前不是 HTTPS 安全上下文，无法访问麦克风');
+        }
+
+        try {
+          ctx = new AudioContext({ sampleRate: TARGET_RATE, latencyHint: 'interactive' });
+        } catch (_) {
+          ctx = new AudioContext();
+        }
+        if (!ctx.audioWorklet || typeof ctx.audioWorklet.addModule !== 'function') {
+          throw new Error('当前浏览器不支持 AudioWorklet');
+        }
+
+        const constraints = {
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            channelCount: 1,
+            sampleRate: TARGET_RATE,
+          },
+        };
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (err) {
+          // 退回到不带约束，AudioWorklet 会在任意输入采样率下降到 16k
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        }
+
+        const blob = new Blob([WORKLET_SRC], { type: 'application/javascript' });
+        const url = URL.createObjectURL(blob);
+        try {
+          await ctx.audioWorklet.addModule(url);
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+
+        srcNode = ctx.createMediaStreamSource(stream);
+        wkNode = new AudioWorkletNode(ctx, 'pcm-resampler', {
+          numberOfInputs: 1,
+          numberOfOutputs: 1,
+          outputChannelCount: [1],
+          processorOptions: { targetRate: TARGET_RATE, batchSize: FRAME_SAMPLES },
+        });
+        wkNode.port.onmessage = (ev) => {
+          if (!subscribers.size) return;
+          const data = ev.data;
+          for (const cb of Array.from(subscribers)) {
+            try { cb(data, TARGET_RATE); } catch (_) {}
+          }
+        };
+        // 保持节点在图中存活；将 worklet 的输出接到一个静音 sink
+        silentSink = ctx.createGain(); silentSink.gain.value = 0;
+        srcNode.connect(wkNode);
+        wkNode.connect(silentSink);
+        silentSink.connect(ctx.destination);
+        return ctx;
+      }
+
+      function release() {
+        if (subscribers.size > 0) return;
+        try { if (wkNode) { wkNode.port.onmessage = null; wkNode.disconnect(); } } catch (_) {}
+        try { if (srcNode) srcNode.disconnect(); } catch (_) {}
+        try { if (silentSink) silentSink.disconnect(); } catch (_) {}
+        try { if (ctx) ctx.close(); } catch (_) {}
+        try { if (stream) stream.getTracks().forEach((t) => t.stop()); } catch (_) {}
+        wkNode = null; srcNode = null; silentSink = null; ctx = null; stream = null;
+      }
+
+      return {
+        async subscribe(cb) { await ensure(); subscribers.add(cb); return cb; },
+        unsubscribe(cb) { subscribers.delete(cb); release(); },
+        // 对外恒定暴露 16kHz，由 worklet 保证
+        get sampleRate() { return TARGET_RATE; },
+        get frameSamples() { return FRAME_SAMPLES; },
+        get ctx() { return ctx; },
+      };
+    })();
+
+    // ═══════════════════════════════════════════════════
+    // 1b) 整场录音轨：跟 ASR / KWS 并行的 PCM 累积器
+    //    输出：Int16 chunks（拼 WAV 用）+ peaks[]（波形用）
+    // ═══════════════════════════════════════════════════
+    const recTrack = (() => {
+      const int16Chunks = []; // 每 ~100ms 一段 Int16Array（3.2KB）
+      const peaks = [];       // 每 ~100ms 一个 0..1 峰值
+      let sub = null;
+      let totalSamples = 0;
+      let sampleRate = 16000;
+      let onAppendCb = null;
+
+      async function start(onAppend) {
+        if (sub) return;
+        onAppendCb = onAppend || null;
+        int16Chunks.length = 0;
+        peaks.length = 0;
+        totalSamples = 0;
+        sub = await sharedMic.subscribe((f32, rate) => {
+          sampleRate = rate;
+          const i16 = new Int16Array(f32.length);
+          let peak = 0;
+          for (let i = 0; i < f32.length; i++) {
+            const v = Math.max(-1, Math.min(1, f32[i]));
+            i16[i] = v < 0 ? Math.round(v * 0x8000) : Math.round(v * 0x7fff);
+            const a = v < 0 ? -v : v;
+            if (a > peak) peak = a;
+          }
+          int16Chunks.push(i16);
+          peaks.push(peak);
+          totalSamples += f32.length;
+          if (onAppendCb) {
+            try { onAppendCb(peak, totalSamples / sampleRate); } catch (_) {}
+          }
+        });
+      }
+
+      function stop() {
+        if (sub) { sharedMic.unsubscribe(sub); sub = null; }
+        onAppendCb = null;
+      }
+
+      function reset() {
+        stop();
+        int16Chunks.length = 0;
+        peaks.length = 0;
+        totalSamples = 0;
+      }
+
+      function buildWavBlob() {
+        if (!int16Chunks.length) return null;
+        const dataBytes = totalSamples * 2;
+        const buf = new ArrayBuffer(44 + dataBytes);
+        const view = new DataView(buf);
+        const writeStr = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+        writeStr(0, 'RIFF');
+        view.setUint32(4, 36 + dataBytes, true);
+        writeStr(8, 'WAVE'); writeStr(12, 'fmt ');
+        view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+        view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true);
+        view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+        writeStr(36, 'data'); view.setUint32(40, dataBytes, true);
+        let off = 44;
+        for (const chunk of int16Chunks) {
+          const bytes = new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+          new Uint8Array(buf, off, bytes.length).set(bytes);
+          off += bytes.length;
+        }
+        return new Blob([buf], { type: 'audio/wav' });
+      }
+
+      return {
+        start, stop, reset, buildWavBlob,
+        get peaks() { return peaks; },
+        get durationSec() { return sampleRate ? totalSamples / sampleRate : 0; },
+        get hasData() { return totalSamples > 0; },
+        get isRunning() { return sub !== null; },
+      };
+    })();
+
+    // ═══════════════════════════════════════════════════
+    // 2) 全局状态
+    // ═══════════════════════════════════════════════════
+    const state = {
+      // 顶部
+      meetingStartTs: 0,
+      showRaw: false,
+
+      // 保存状态
+      savedDebounce: null,
+      saveState: 'idle', // idle | dirty | saved
+
+      // 实时识别
+      transcriptLines: [],
+      liveSessionId: 'default',
+      liveRunning: false,
+      livePaused: false,
+      liveSubCb: null,
+      liveBuf: [],
+      liveTail: null,
+      silenceFrames: 0,
+      liveStartTs: 0,
+      livePausedAt: 0,
+      livePausedTotalMs: 0,
+      liveTimer: null,
+      asrInFlight: 0, // 计数，并行多段识别时兼容
+      currentPartial: '', // 实时可视气泡的临时文字
+      currentSpeakerHint: '', // 最近一次已完成气泡的发言人
+
+      // 动态 VAD
+      vadNoiseFloor: 0.006, // EMA 估计的背景底噪 RMS
+      vadIsSpeech: false,   // 上一帧是否判为有声
+
+      // 纪要
+      summaryAuto: true,
+      summaryDebounce: null,
+      summaryInFlight: false,
+      summaryLastTs: 0,
+      summaryTicker: null,
+      summaryData: null,
+
+      // 中栏 · AI 章节
+      chaptersData: null,           // 后端返回的 chapters 列表（LLM 生成）
+      chaptersGeneratedAt: null,    // 上次 AI 生成的时间（毫秒时间戳）
+      chaptersInFlight: false,      // 防止重复触发
+      chaptersError: null,          // 上次失败的错误信息
+
+      // 中栏 Tab
+      midTab: 'transcript', // transcript | summary | chapters | speakers
+
+      // 左栏 · 整场音频播放
+      audioUrl: null,
+      audioTimer: null,
+      audioPlayRates: [1, 1.25, 1.5, 2],
+      audioPlayRateIdx: 0,
+      audioSeeking: false,
+      waveformCtx: null,
+      activeLineIdx: -1,          // 高亮的 transcript line 索引
+      highlightedSpeaker: null,   // speakers tab 点击后的高亮筛选
+
+      // 右栏 · AI 问答
+      chatMessages: [],           // {role: 'user'|'bot', text}
+      chatInFlight: false,
+
+      // WebSocket
+      wsCtl: null,
+    };
+    const MAX_RECORD_SEC = 6 * 60 * 60; // 06:00:00 上限
+    const SUMMARY_DEBOUNCE_MS = 8000;
+    // 上段尾部回溯已关闭（原 0.8s 会与服务端 VAD 重叠，造成首字重复）
+    const TAIL_SEC = 0;
+
+    // ═══════════════════════════════════════════════════
+    // 3) 顶部栏：日期时间 + 保存状态 + 导出
+    // ═══════════════════════════════════════════════════
+    function updateHeaderDate() {
+      const d = new Date();
+      $('headerDate').textContent =
+        d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
+        ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ' 记录';
+    }
+    function setSaveStatus(kind) {
+      const el = $('saveStatus');
+      el.classList.remove('saved', 'saving');
+      const label = el.querySelector('.label');
+      if (kind === 'saved') { el.classList.add('saved'); label.textContent = '已保存'; }
+      else if (kind === 'saving') { el.classList.add('saving'); label.textContent = '保存中…'; }
+      else if (kind === 'recording') { el.classList.add('saving'); label.textContent = '录音中'; }
+      else { label.textContent = '未开始'; }
+      state.saveState = kind;
+    }
+    function bumpSaveDebounce() {
+      setSaveStatus('saving');
+      clearTimeout(state.savedDebounce);
+      state.savedDebounce = setTimeout(() => {
+        if (state.liveRunning) setSaveStatus('saved');
+      }, 1200);
+    }
+
+    $('btnToggleRaw').onclick = () => {
+      state.showRaw = !state.showRaw;
+      $('btnToggleRaw').classList.toggle('active', state.showRaw);
+      toast(state.showRaw ? '已切换为原始 ASR 文本' : '已切换为 LLM 纠错文本');
+      renderTranscript();
+    };
+    $('btnCopyTranscript').onclick = () => {
+      if (!state.transcriptLines.length) { toast('暂无转录可复制'); return; }
+      const txt = state.transcriptLines.map((l) => '[' + l.who + '] ' + l.text).join('\n');
+      navigator.clipboard.writeText(txt).then(() => toast('转录已复制'));
+    };
+    $('btnExportMd').onclick = () => { exportMarkdown(); };
+
+    function exportMarkdown() {
+      const now = new Date();
+      const title = '会议记录 · ' + now.getFullYear() + '-' + pad2(now.getMonth()+1) + '-' + pad2(now.getDate());
+      let md = '# ' + title + '\n\n';
+      md += '**时间**：' + now.toLocaleString() + '\n\n';
+      md += '## 转录\n\n';
+      if (!state.transcriptLines.length) md += '_（无）_\n\n';
+      else {
+        for (const l of state.transcriptLines) {
+          md += '- **' + (l.who || '未知') + '**：' + l.text + '\n';
+        }
+        md += '\n';
+      }
+      md += '## 纪要\n\n';
+      const s = state.summaryData;
+      if (!s) md += '_（未生成）_\n\n';
+      else {
+        if (s.summary) md += '### 摘要\n\n' + s.summary + '\n\n';
+        if (s.key_points && s.key_points.length) {
+          md += '### 要点\n\n';
+          for (const x of s.key_points) md += '- ' + x + '\n';
+          md += '\n';
+        }
+        if (s.decisions && s.decisions.length) {
+          md += '### 决议\n\n';
+          for (const x of s.decisions) md += '- ' + x + '\n';
+          md += '\n';
+        }
+        if (s.action_items && s.action_items.length) {
+          md += '### 待办\n\n';
+          for (const x of s.action_items) {
+            const t = (x && x.task) || String(x);
+            const owner = x && x.owner ? '（负责人：' + x.owner + '）' : '';
+            const due = x && x.due_date ? '  截止：' + x.due_date : '';
+            md += '- ' + t + owner + due + '\n';
+          }
+          md += '\n';
+        }
+        if (s.risks && s.risks.length) {
+          md += '### 风险\n\n';
+          for (const x of s.risks) md += '- ' + x + '\n';
+          md += '\n';
+        }
+      }
+      const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = title.replace(/\s+/g, '_') + '.md';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('Markdown 已导出');
+    }
+
+    // ═══════════════════════════════════════════════════
+    // 4) 左栏：气泡式转录渲染
+    // ═══════════════════════════════════════════════════
+    function renderTranscript() {
+      const box = $('transcriptList');
+      const hasAny = state.transcriptLines.length > 0;
+      const showCurrent = state.liveRunning;
+      if (!hasAny && !showCurrent) {
+        box.innerHTML = '<div class="transcript-empty"><span class="emoji">🎙️</span>点击下方蓝紫色圆形按钮开始录音</div>';
+        return;
+      }
+      const parts = [];
+      for (const line of state.transcriptLines) {
+        parts.push(renderBubbleHtml(line, false));
+      }
+      if (showCurrent) {
+        parts.push(renderCurrentBubbleHtml());
+      }
+      box.innerHTML = parts.join('');
+      box.scrollTop = box.scrollHeight;
+    }
+    function renderBubbleHtml(line, isCurrent) {
+      const who = line.who || '未知';
+      const color = speakerColor(who);
+      const initial = speakerInitial(who);
+      const corrected = line.corrected && !state.showRaw
+        ? '<span class="badge" title="LLM 已纠错">✓</span>' : '';
+      const when = line.ts ? fmtRelTs(line.ts) : '';
+      const textHtml = state.showRaw
+        ? escHtml(line.raw || line.text)
+        : escHtml(line.text || line.raw || '');
+      return (
+        '<div class="bubble' + (isCurrent ? ' current' : '') + '">' +
+          '<div class="avatar" style="background:' + color + '">' + escHtml(initial) + '</div>' +
+          '<div class="body">' +
+            '<div class="meta"><span class="name">' + escHtml(who) + '</span>' +
+              (when ? '<span>' + escHtml(when) + '</span>' : '') +
+              corrected +
+            '</div>' +
+            '<div class="text">' + textHtml + '</div>' +
+          '</div>' +
+        '</div>'
+      );
+    }
+    function renderCurrentBubbleHtml() {
+      const who = state.currentSpeakerHint || '正在发言';
+      const color = speakerColor(who);
+      const initial = speakerInitial(who);
+      const partial = state.currentPartial && state.currentPartial.trim();
+      const flight = state.asrInFlight > 0;
+      let body = '';
+      if (partial) {
+        body = escHtml(partial);
+      } else if (flight) {
+        body = '<span class="dots"><span></span><span></span><span></span></span> 识别中…';
+      } else if (state.livePaused) {
+        body = '已暂停';
+      } else {
+        body = '<span class="dots"><span></span><span></span><span></span></span> 正在聆听…';
+      }
+      const badge = flight ? '<span class="badge">识别中</span>' : '';
+      return (
+        '<div class="bubble current">' +
+          '<div class="avatar" style="background:' + color + '">' + escHtml(initial) + '</div>' +
+          '<div class="body">' +
+            '<div class="meta"><span class="name">' + escHtml(who) + '</span>' + badge + '</div>' +
+            '<div class="text">' + body + '</div>' +
+          '</div>' +
+        '</div>'
+      );
+    }
+    function fmtRelTs(ts) {
+      if (!state.meetingStartTs) return '';
+      const sec = Math.max(0, Math.floor((ts - state.meetingStartTs) / 1000));
+      return fmtHMS(sec).replace(/^00:/, '');
+    }
+    function appendTranscript(speaker, text, raw, corrected, timing) {
+      const t = (text || '').trim();
+      if (!t) return;
+      const who = speaker || '未知';
+      const startMs = (timing && typeof timing.start_ms === 'number') ? timing.start_ms : 0;
+      const endMs = (timing && typeof timing.end_ms === 'number') ? timing.end_ms : startMs;
+      const durSec = (timing && typeof timing.duration_sec === 'number') ? timing.duration_sec : 0;
+      const last = state.transcriptLines[state.transcriptLines.length - 1];
+      if (last && last.who === who) {
+        last.text = mergeOverlappingText(last.text, t);
+        last.raw = mergeOverlappingText(last.raw || '', raw || t);
+        last.corrected = last.corrected || !!corrected;
+        last.ts = Date.now();
+        // 时间窗合并：start 取较小，end 取较大；时长累加
+        if (startMs && (!last.start_ms || startMs < last.start_ms)) last.start_ms = startMs;
+        if (endMs && endMs > (last.end_ms || 0)) last.end_ms = endMs;
+        last.duration_sec = (last.duration_sec || 0) + durSec;
+      } else {
+        state.transcriptLines.push({
+          who, text: t, raw: raw || t, corrected: !!corrected, ts: Date.now(),
+          start_ms: startMs, end_ms: endMs, duration_sec: durSec,
+        });
+      }
+      state.currentSpeakerHint = who;
+      state.currentPartial = '';
+      renderTranscript();
+      renderTimelineList();
+      renderSpeakersStats();
+      renderChapters();
+      bumpSaveDebounce();
+      scheduleSummaryRefresh();
+    }
+
+    // ═══════════════════════════════════════════════════
+    // 5) 底部录音控制：开始 / 暂停（不释放麦克风）/ 停止
+    // ═══════════════════════════════════════════════════
+    function getVadParams() {
+      const rate = sharedMic.sampleRate; // 固定 16000
+      return {
+        thresh:    parseFloat($('settingSilenceThresh').value) || 0.01,
+        silMs:     parseInt($('settingSilenceMs').value)       || 1000,
+        minSamples: (parseFloat($('settingMinLen').value) || 2.5) * rate,
+        maxSamples: (parseFloat($('settingMaxLen').value) || 8)   * rate,
+      };
+    }
+    function getThreshold() {
+      const v = parseFloat($('settingThreshold').value);
+      return Number.isFinite(v) ? v : 0.45;
+    }
+    function calcRms(arr) {
+      let s = 0;
+      for (let i = 0; i < arr.length; i++) s += arr[i] * arr[i];
+      return Math.sqrt(s / arr.length);
+    }
+    function bufSamples() { return state.liveBuf.reduce((s, a) => s + a.length, 0); }
+    function flattenBuf(arrays) {
+      const total = arrays.reduce((s, a) => s + a.length, 0);
+      const out = new Float32Array(total);
+      let o = 0;
+      for (const a of arrays) { out.set(a, o); o += a.length; }
+      return out;
+    }
+    function setRecUi(kind) {
+      const status = $('recStatus');
+      status.classList.remove('recording', 'paused', 'stopped');
+      if (kind === 'recording') { status.classList.add('recording'); status.textContent = '录音中…'; }
+      else if (kind === 'paused') { status.classList.add('paused'); status.textContent = '已暂停'; }
+      else { status.classList.add('stopped'); status.textContent = '未开始'; }
+
+      // 按钮显隐
+      $('btnRecStart').classList.toggle('hidden', kind !== 'stopped');
+      $('btnRecPause').classList.toggle('hidden', kind === 'stopped');
+      $('btnRecStop').classList.toggle('hidden', kind === 'stopped');
+
+      // 暂停按钮图标切换
+      const pauseIcon = $('pauseIcon');
+      if (pauseIcon) {
+        if (kind === 'paused') {
+          // 播放三角
+          pauseIcon.innerHTML = '<path d="M8 5v14l11-7L8 5z"/>';
+        } else {
+          pauseIcon.innerHTML = '<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>';
+        }
+      }
+    }
+    function startRecTimer() {
+      stopRecTimer();
+      state.liveTimer = setInterval(() => {
+        const base = state.liveStartTs || Date.now();
+        const pausedOffset = state.livePausedTotalMs + (state.livePaused ? (Date.now() - state.livePausedAt) : 0);
+        const sec = Math.floor((Date.now() - base - pausedOffset) / 1000);
+        $('recTimer').textContent = fmtHMS(sec) + ' / ' + fmtHMS(MAX_RECORD_SEC);
+        if (sec >= MAX_RECORD_SEC) { stopLive(); toast('已达最长 6 小时，自动结束'); }
+      }, 500);
+    }
+    function stopRecTimer() {
+      if (state.liveTimer) { clearInterval(state.liveTimer); state.liveTimer = null; }
+    }
+
+    async function flushUtterance(force) {
+      if (!state.liveBuf.length) return;
+      const samples = bufSamples();
+      const { minSamples } = getVadParams();
+      if (!force && samples < minSamples) return;
+
+      const newPcm = flattenBuf(state.liveBuf);
+      let pcmToSend;
+      if (state.liveTail && state.liveTail.length) {
+        pcmToSend = new Float32Array(state.liveTail.length + newPcm.length);
+        pcmToSend.set(state.liveTail, 0);
+        pcmToSend.set(newPcm, state.liveTail.length);
+      } else {
+        pcmToSend = newPcm;
+      }
+      const tailLen = Math.min(newPcm.length, Math.round(TAIL_SEC * sharedMic.sampleRate));
+      state.liveTail = newPcm.slice(newPcm.length - tailLen);
+      state.liveBuf = [];
+      state.silenceFrames = 0;
+
+      const rate = sharedMic.sampleRate;
+      const th = getThreshold();
+      // 估算本段在整场录音里的开始时间：当前录音总时长 − 本段样本数
+      const segDurSec = pcmToSend.length / rate;
+      const nowDurSec = recTrack.durationSec;
+      const startSec = Math.max(0, nowDurSec - segDurSec);
+      const offsetMs = Math.round(startSec * 1000);
+      state.asrInFlight++;
+      renderTranscript();
+      try {
+        const buf = pcmToSend.buffer.slice(pcmToSend.byteOffset, pcmToSend.byteOffset + pcmToSend.byteLength);
+        const hwEl = $('settingHotword');
+        const hw = hwEl ? (hwEl.value || '').trim() : '';
+        const url = '/api/recognize_pcm?sample_rate=' + rate
+          + '&threshold=' + th
+          + '&session_id=' + encodeURIComponent(state.liveSessionId)
+          + '&offset_ms=' + offsetMs
+          + (hw ? '&hotword=' + encodeURIComponent(hw) : '');
+        const r = await api(url, {
+          method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: buf,
+        });
+        if ((r.text || '').trim()) {
+          appendTranscript(r.speaker, r.text, r.text_raw, r.llm_corrected, {
+            start_ms: (typeof r.start_ms === 'number' ? r.start_ms : offsetMs),
+            end_ms: (typeof r.end_ms === 'number' ? r.end_ms : offsetMs + Math.round(segDurSec * 1000)),
+            duration_sec: (typeof r.duration_sec === 'number' ? r.duration_sec : segDurSec),
+          });
+        }
+      } catch (e) {
+        toast('识别失败：' + e.message);
+      } finally {
+        state.asrInFlight = Math.max(0, state.asrInFlight - 1);
+        renderTranscript();
+      }
+    }
+
+    async function startLive() {
+      if (state.liveRunning) return;
+      try {
+        // 重置状态
+        state.liveSessionId = 'sess_' + Date.now();
+        state.transcriptLines = [];
+        state.liveBuf = []; state.liveTail = null;
+        state.silenceFrames = 0; state.currentPartial = '';
+        state.vadNoiseFloor = 0.006; state.vadIsSpeech = false;
+        state.meetingStartTs = Date.now();
+        state.liveStartTs = state.meetingStartTs;
+        state.livePausedAt = 0; state.livePausedTotalMs = 0;
+        state.livePaused = false;
+        state.summaryData = null; renderSummary();
+        // 重置 AI 章节状态（新会议从零开始）
+        state.chaptersData = null;
+        state.chaptersGeneratedAt = null;
+        state.chaptersError = null;
+        state.chaptersInFlight = false;
+        // 重置整场录音轨 + 音频播放器
+        recTrack.reset();
+        resetAudioPlayer();
+        renderTimelineList();
+        renderSpeakersStats();
+        renderChapters();
+        updateHeaderDate();
+        await api('/api/asr_reset?session_id=' + encodeURIComponent(state.liveSessionId), { method: 'POST' }).catch(() => {});
+
+        // 整场录音轨：与 ASR 并行；每帧驱动波形重绘
+        await recTrack.start(() => { drawWaveform(); });
+
+        state.liveSubCb = await sharedMic.subscribe((frame, rate) => {
+          if (!state.liveRunning || state.livePaused) return;
+          state.liveBuf.push(frame);
+          const { thresh: manualThresh, silMs, maxSamples } = getVadParams();
+          const rms = calcRms(frame);
+          // 只在非语音态更新底噪 EMA，避免被自己的声音抬高
+          if (!state.vadIsSpeech) {
+            state.vadNoiseFloor = state.vadNoiseFloor * 0.95 + rms * 0.05;
+          }
+          if (state.vadNoiseFloor < 0.003) state.vadNoiseFloor = 0.003;
+          // 动态阈值 = max(手动下限, 3 × 底噪)
+          const dynThresh = Math.max(manualThresh, state.vadNoiseFloor * 3);
+          // worklet 约 100ms 一帧（frame.length ≈ 1600 @ 16k）
+          const framesPerSec = rate / Math.max(1, frame.length);
+          const silFrameThresh = Math.max(1, Math.ceil((silMs / 1000) * framesPerSec));
+          if (rms >= dynThresh) {
+            state.vadIsSpeech = true;
+            state.silenceFrames = 0;
+          } else {
+            state.vadIsSpeech = false;
+            state.silenceFrames++;
+            if (state.silenceFrames >= silFrameThresh) flushUtterance(false);
+          }
+          if (bufSamples() >= maxSamples) flushUtterance(true);
+        });
+
+        state.liveRunning = true;
+        setRecUi('recording');
+        setSaveStatus('recording');
+        startRecTimer();
+        renderTranscript();
+        // 开始会议录音时同步打开「小云」唤醒监听（无单独开关，与录音一体）
+        if (!wakeRunning) {
+          enableWake().catch(() => {});
+        }
+      } catch (e) {
+        toast('开始录音失败：' + (e && e.message ? e.message : '未知错误'));
+        setRecUi('stopped');
+      }
+    }
+
+    function pauseLive() {
+      if (!state.liveRunning || state.livePaused) return;
+      state.livePaused = true;
+      state.livePausedAt = Date.now();
+      setRecUi('paused');
+      renderTranscript();
+    }
+    function resumeLive() {
+      if (!state.liveRunning || !state.livePaused) return;
+      state.livePausedTotalMs += (Date.now() - state.livePausedAt);
+      state.livePausedAt = 0;
+      state.livePaused = false;
+      setRecUi('recording');
+      setSaveStatus('recording');
+      renderTranscript();
+    }
+    async function stopLive() {
+      if (!state.liveRunning) return;
+      state.liveRunning = false;
+      state.livePaused = false;
+      await flushUtterance(true).catch(() => {});
+      if (state.liveSubCb) { sharedMic.unsubscribe(state.liveSubCb); state.liveSubCb = null; }
+      recTrack.stop();
+      state.liveBuf = []; state.liveTail = null; state.silenceFrames = 0;
+      stopRecTimer();
+      setRecUi('stopped');
+      setSaveStatus('saved');
+      renderTranscript();
+      // 结束录音 → 把整段 PCM 拼成 WAV 加载到播放器
+      finalizeAudioPlayer();
+      renderTimelineList();
+      renderSpeakersStats();
+      renderChapters();
+      // 结束时最后一次纪要刷新
+      if (state.transcriptLines.length) refreshSummary(true).catch(() => {});
+      // 唤醒监听与会议录音同步：结束会议即关闭 KWS/唤醒订阅
+      if (wakeRunning) disableWake();
+    }
+
+    $('btnRecStart').onclick = startLive;
+    $('btnRecPause').onclick = () => {
+      if (state.livePaused) resumeLive(); else pauseLive();
+    };
+    $('btnRecStop').onclick = stopLive;
+
+    // ═══════════════════════════════════════════════════
+    // 6) 右栏：AI 纪要（debounce 刷新 + 自动/手动 + 上次刷新）
+    // ═══════════════════════════════════════════════════
+    function scheduleSummaryRefresh() {
+      if (!state.summaryAuto) return;
+      clearTimeout(state.summaryDebounce);
+      state.summaryDebounce = setTimeout(() => {
+        refreshSummary(false).catch(() => {});
+      }, SUMMARY_DEBOUNCE_MS);
+    }
+    async function refreshSummary(silent) {
+      if (state.summaryInFlight) return;
+      if (!state.transcriptLines.length && !silent) {
+        toast('转录为空，暂无可总结内容'); return;
+      }
+      state.summaryInFlight = true;
+      const btn = $('btnSummaryRefresh');
+      if (btn) btn.disabled = true;
+      try {
+        const sid = state.liveSessionId || 'default';
+        const summary = await api('/api/meeting/summary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sid, title: '会议纪要' }),
+        });
+        state.summaryData = summary;
+        state.summaryLastTs = Date.now();
+        renderSummary();
+      } catch (e) {
+        if (!silent) toast('纪要刷新失败：' + (e && e.message ? e.message : '未知错误'));
+      } finally {
+        state.summaryInFlight = false;
+        if (btn) btn.disabled = false;
+      }
+    }
+    function renderSummary() {
+      const s = state.summaryData;
+      const box = $('summaryContent');
+      const placeholder = $('summaryPlaceholder');
+      if (!s) {
+        box.classList.add('hidden');
+        placeholder.classList.remove('hidden');
+        return;
+      }
+      placeholder.classList.add('hidden');
+      box.classList.remove('hidden');
+
+      const parts = [];
+
+      // ─ 顶部 hero：会议标题 + 一句话副标题（图里那种"自然语言驱动 ADS 规划自动化"+导语）
+      const heroTitle = (s.title || '').trim();
+      const heroSub = (s.summary || '').trim();
+      if (heroTitle || heroSub) {
+        parts.push(
+          '<div class="report-hero">' +
+            (heroTitle ? '<div class="h-title">' + escHtml(heroTitle) + '</div>' : '') +
+            (heroSub ? '<div class="h-sub">' + escHtml(heroSub) + '</div>' : '') +
+          '</div>'
+        );
+      }
+
+      // ─ 模块化报告：优先用 LLM 返回的 modules
+      const modules = Array.isArray(s.modules) ? s.modules : [];
+      if (modules.length) {
+        for (const m of modules) {
+          parts.push(renderReportModule(m));
+        }
+      } else {
+        // 兼容旧字段（早期 LLM 返回没有 modules / 用户拿到老 summaryData）
+        parts.push(...renderLegacySections(s));
+      }
+
+      box.innerHTML = parts.length
+        ? parts.join('')
+        : '<div class="summary-placeholder"><span class="emoji">🤔</span>LLM 暂未产出结构化纪要</div>';
+    }
+
+    function renderReportModule(m) {
+      if (!m || !m.type) return '';
+      const head =
+        '<div class="m-head">' +
+          '<span class="m-no">' + escHtml(m.no || '00') + '</span>' +
+          '<span class="m-slash">/</span>' +
+          '<span class="m-title">' + escHtml(m.title || '') + '</span>' +
+        '</div>';
+      const intro = m.intro ? '<div class="m-intro">' + escHtml(m.intro) + '</div>' : '';
+      let body = '';
+      if (m.type === 'bullets') {
+        body = '<ul class="report-bullets">' + (m.items || []).map((it) => {
+          const label = it && it.label ? '<span class="label">' + escHtml(it.label) + '</span>' : '';
+          const desc = it && it.desc ? '<span class="desc">' + escHtml(it.desc) + '</span>' : '';
+          return '<li><span class="dot"></span><div>' + label + desc + '</div></li>';
+        }).join('') + '</ul>';
+      } else if (m.type === 'table') {
+        const cols = m.columns || [];
+        const rows = m.rows || [];
+        body =
+          '<div class="report-table-wrap"><table class="report-table">' +
+            '<thead><tr>' + cols.map((c) => '<th>' + escHtml(c) + '</th>').join('') + '</tr></thead>' +
+            '<tbody>' + rows.map((r) =>
+              '<tr>' + r.map((cell) => '<td>' + escHtml(String(cell)) + '</td>').join('') + '</tr>'
+            ).join('') + '</tbody>' +
+          '</table></div>';
+      } else if (m.type === 'actions') {
+        body = '<div class="report-actions">' + (m.items || []).map((it) => {
+          const task = '<span class="task">' + escHtml(it.task || '') + '</span>';
+          const owner = it.owner ? '<span class="owner">' + escHtml(it.owner) + '</span>' : '<span></span>';
+          const due = it.due ? '<span class="due">' + escHtml(it.due) + '</span>' : '<span></span>';
+          return '<div class="item">' + task + owner + due + '</div>';
+        }).join('') + '</div>';
+      } else if (m.type === 'callout') {
+        const isRisk = /(风险|未决|问题|隐患)/.test(m.title || '');
+        body = '<ul class="report-callout' + (isRisk ? ' is-risk' : '') + '">' +
+          (m.items || []).map((x) => '<li>' + escHtml(String(x)) + '</li>').join('') +
+        '</ul>';
+      }
+      return '<section class="report-module">' + head + intro + '<div class="m-body">' + body + '</div></section>';
+    }
+
+    // 没有 modules 时的兜底渲染（向后兼容旧的 summary 数据格式）
+    function renderLegacySections(s) {
+      const out = [];
+      if (s.key_points && s.key_points.length) {
+        out.push(
+          '<div class="summary-section"><h3>要点</h3><ul>' +
+            s.key_points.map((x) => '<li>' + escHtml(String(x)) + '</li>').join('') +
+          '</ul></div>'
+        );
+      }
+      if (s.decisions && s.decisions.length) {
+        out.push(
+          '<div class="summary-section"><h3>决议</h3><ul>' +
+            s.decisions.map((x) => '<li>' + escHtml(String(x)) + '</li>').join('') +
+          '</ul></div>'
+        );
+      }
+      if (s.action_items && s.action_items.length) {
+        out.push(
+          '<div class="summary-section"><h3>待办</h3>' +
+            s.action_items.map((x) => {
+              const task = escHtml((x && x.task) || String(x));
+              const owner = x && x.owner ? '<span class="owner">负责人：' + escHtml(x.owner) + '</span>' : '<span class="owner"></span>';
+              const due = x && x.due_date ? '<span class="due">截止：' + escHtml(x.due_date) + '</span>' : '<span class="due"></span>';
+              return '<div class="action-item"><span>' + task + '</span>' + owner + due + '</div>';
+            }).join('') +
+          '</div>'
+        );
+      }
+      if (s.risks && s.risks.length) {
+        out.push(
+          '<div class="summary-section"><h3>风险</h3><ul>' +
+            s.risks.map((x) => '<li>' + escHtml(String(x)) + '</li>').join('') +
+          '</ul></div>'
+        );
+      }
+      return out;
+    }
+    function startSummaryTicker() {
+      if (state.summaryTicker) return;
+      state.summaryTicker = setInterval(() => {
+        const el = $('summaryLastRefresh');
+        if (!el) return;
+        if (!state.summaryLastTs) { el.textContent = '尚未生成'; return; }
+        const d = Math.max(0, Math.floor((Date.now() - state.summaryLastTs) / 1000));
+        if (d < 60) el.textContent = '上次刷新 ' + d + 's 前';
+        else if (d < 3600) el.textContent = '上次刷新 ' + Math.floor(d/60) + ' 分钟前';
+        else el.textContent = '上次刷新 ' + Math.floor(d/3600) + ' 小时前';
+      }, 1000);
+    }
+    $('summaryAutoToggle').onchange = (e) => {
+      state.summaryAuto = !!e.target.checked;
+      toast(state.summaryAuto ? '自动刷新已开启' : '自动刷新已关闭');
+      if (state.summaryAuto) scheduleSummaryRefresh();
+    };
+    $('btnSummaryRefresh').onclick = () => { refreshSummary(false); };
+
+    // ═══════════════════════════════════════════════════
+    // 7) 右下 FAB：小云小云唤醒
+    // ═══════════════════════════════════════════════════
+    let wakeSubCb = null;
+    let wakeRing = null, wakeRingCap = 0, wakeRingPos = 0, wakeRingFull = false;
+    let wakeRunning = false;
+    let wakeSessionId = 'wake_default';
+    let wakePhase = 'IDLE'; // IDLE | MONITORING | WOKEN | LISTENING | RECOGNIZING
+    let wakeListenBuf = [], wakeListenTimer = null, wakeSilenceFrames = 0;
+    let wakeListenStartTs = 0;
+    let kwsPollTimer = null, kwsBusy = false;
+    /** 来自 /api/health 的 wake_ack_audio，相对站点根（即 echopass/static/） */
+    let wakeAckAudioRel = '';
+    let currentWakeAckAudio = null;
+    /** 仅当配置了 wake_ack 音频时：在该段预制音播放结束（ended/error）后的宽限期内，不因静音切段（给你时间再开口） */
+    let wakePostAckGraceUntil = 0;
+    const KWS_WINDOW_SEC = 3, KWS_STEP_MS = 1200;
+    const WAKE_MAX_SEC = 10, WAKE_MIN_SEC = 1, WAKE_SIL_MS = 700;
+    /** 预制提示音播完之后再宽限的毫秒数（语音唤醒场景：等「在的请说」结束后的几秒） */
+    const WAKE_POST_ACK_GRACE_MS = 4000;
+
+    function setFabState(kind, label) {
+      const fab = $('fab');
+      fab.classList.toggle('active', kind === 'monitoring' || kind === 'woken' || kind === 'recognizing');
+      fab.classList.toggle('woken', kind === 'woken' || kind === 'recognizing');
+      $('fabLabel').textContent = '小云小云 · ' + (label || ({
+        idle: '未启用',
+        monitoring: '监听中',
+        woken: '已唤醒',
+        recognizing: '识别中',
+        answering: '回答中',
+        error: '异常',
+      }[kind] || kind));
+    }
+    function showFabBubble(userText, replyText) {
+      $('fabUserText').textContent = userText || '';
+      $('fabReplyText').textContent = replyText || '';
+      $('fabBubble').classList.add('show');
+      clearTimeout(showFabBubble._t);
+      showFabBubble._t = setTimeout(() => $('fabBubble').classList.remove('show'), 9000);
+    }
+    function setFabTtsState(kind) {
+      const el = $('fabTtsIcon');
+      el.classList.remove('playing');
+      if (kind === 'playing') { el.classList.add('playing'); el.textContent = '▶︎'; el.title = '正在播放'; }
+      else if (kind === 'done') { el.textContent = '🔈'; el.title = '播放完成'; }
+      else if (kind === 'error') { el.textContent = '⚠️'; el.title = 'TTS 异常'; }
+      else if (kind === 'off') { el.textContent = '🔇'; el.title = '未启用 TTS'; }
+      else { el.textContent = '🔈'; el.title = ''; }
+    }
+
+    function wakeInitRing(sr) {
+      wakeRingCap = Math.ceil(sr * KWS_WINDOW_SEC);
+      wakeRing = new Float32Array(wakeRingCap);
+      wakeRingPos = 0; wakeRingFull = false;
+    }
+    function wakePushSamples(f32) {
+      for (let i = 0; i < f32.length; i++) {
+        wakeRing[wakeRingPos++] = f32[i];
+        if (wakeRingPos >= wakeRingCap) { wakeRingPos = 0; wakeRingFull = true; }
+      }
+    }
+    function wakeGetWindow() {
+      if (!wakeRing) return new Float32Array(0);
+      if (!wakeRingFull) return wakeRing.subarray(0, wakeRingPos);
+      const out = new Float32Array(wakeRingCap);
+      out.set(wakeRing.subarray(wakeRingPos));
+      out.set(wakeRing.subarray(0, wakeRingPos), wakeRingCap - wakeRingPos);
+      return out;
+    }
+    function startKwsPoll() {
+      kwsPollTimer = setInterval(async () => {
+        if (!wakeRunning || wakePhase !== 'MONITORING' || kwsBusy) return;
+        const rate = sharedMic.sampleRate;
+        const win = wakeGetWindow();
+        if (win.length < rate * 0.5) return;
+        kwsBusy = true;
+        try {
+          const buf = win.buffer.slice(win.byteOffset, win.byteOffset + win.byteLength);
+          const r = await api('/api/kws?sample_rate=' + rate + '&session_id=' + encodeURIComponent(wakeSessionId), {
+            method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: buf,
+          });
+          const th = parseFloat($('settingKwsThreshold').value) || 0.75;
+          const s = r.score != null ? r.score.toFixed(3) : 'n/a';
+          $('fabDebug').textContent = '最近 KWS 分数：' + s + '  阈值：' + th;
+          if (r.triggered || (r.score != null && r.score >= th)) {
+            onWakeTriggered(r.score);
+          }
+        } catch (err) {
+          $('fabDebug').textContent = 'KWS 错误：' + err.message;
+        } finally { kwsBusy = false; }
+      }, KWS_STEP_MS);
+    }
+    function bumpWakeListenTimerAfterAck() {
+      if (wakePhase !== 'LISTENING') return;
+      if (wakeListenTimer) clearTimeout(wakeListenTimer);
+      const elapsed = Date.now() - wakeListenStartTs;
+      const remain = Math.max(
+        4000,
+        WAKE_MAX_SEC * 1000 - elapsed + WAKE_POST_ACK_GRACE_MS,
+      );
+      wakeListenTimer = setTimeout(() => flushWakeUtterance(true), remain);
+    }
+
+    function onWakeTriggered(score) {
+      if (wakePhase !== 'MONITORING') return;
+      if (kwsPollTimer) { clearInterval(kwsPollTimer); kwsPollTimer = null; }
+      wakePostAckGraceUntil = 0;
+      wakeListenBuf = []; wakeSilenceFrames = 0; wakeListenStartTs = Date.now();
+      wakePhase = 'LISTENING';
+      setFabState('woken', '已唤醒，录音中…');
+      wakeListenTimer = setTimeout(() => flushWakeUtterance(true), WAKE_MAX_SEC * 1000);
+      // 配置 assistant.wake_ack_audio 后，此处立即播放预置提示音（如「在呢」）
+      playWakeAck().catch(() => {});
+    }
+
+    function _decodeS16lePcmFromB64(b64) {
+      const bin = atob(b64);
+      const u8 = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      const n = u8.length >> 1;
+      const f32 = new Float32Array(n);
+      const dv = new DataView(u8.buffer);
+      for (let i = 0; i < n; i++) f32[i] = dv.getInt16(i * 2, true) / 32768.0;
+      return f32;
+    }
+
+    /** 右栏 / FAB 回复打字机 + 延后播放流式 PCM（先出字再播语音） */
+    const TYPEWRITER_MS_PER_CHAR = 30;
+    let chatTypewriterInt = null;
+    let fabTypewriterInt = null;
+    let fabTwTarget = '';
+    let fabTwShown = '';
+
+    function clearChatTypewriter() {
+      if (chatTypewriterInt) {
+        clearInterval(chatTypewriterInt);
+        chatTypewriterInt = null;
+      }
+    }
+    function ensureChatTypewriter(botIdx) {
+      if (chatTypewriterInt) return;
+      chatTypewriterInt = setInterval(() => {
+        const m = state.chatMessages[botIdx];
+        if (!m || m.role !== 'bot') {
+          clearChatTypewriter();
+          return;
+        }
+        const tgt = m._twTarget != null ? m._twTarget : '';
+        if (m.text.length < tgt.length) {
+          const lag = tgt.length - m.text.length;
+          const step = lag > 40 ? 4 : lag > 15 ? 3 : lag > 5 ? 2 : 1;
+          m.text = tgt.slice(0, m.text.length + step);
+          m.typing = true;
+          renderChatHistory();
+        }
+      }, TYPEWRITER_MS_PER_CHAR);
+    }
+    function waitChatTypewriterDone(botIdx) {
+      return new Promise((resolve) => {
+        const t = setInterval(() => {
+          const m = state.chatMessages[botIdx];
+          if (!m || m.role !== 'bot') {
+            clearInterval(t);
+            resolve();
+            return;
+          }
+          const tgt = m._twTarget != null ? m._twTarget : '';
+          if (m._streamEnded && m.text.length >= tgt.length) {
+            clearInterval(t);
+            resolve();
+          }
+        }, 45);
+      });
+    }
+    function clearFabTypewriter() {
+      if (fabTypewriterInt) {
+        clearInterval(fabTypewriterInt);
+        fabTypewriterInt = null;
+      }
+    }
+    function ensureFabTypewriter() {
+      if (fabTypewriterInt) return;
+      fabTypewriterInt = setInterval(() => {
+        if (fabTwShown.length < fabTwTarget.length) {
+          const lag = fabTwTarget.length - fabTwShown.length;
+          const step = lag > 40 ? 4 : lag > 15 ? 3 : lag > 5 ? 2 : 1;
+          fabTwShown = fabTwTarget.slice(0, fabTwShown.length + step);
+          const el = $('fabReplyText');
+          if (el) el.textContent = fabTwShown;
+        }
+      }, TYPEWRITER_MS_PER_CHAR);
+    }
+    function waitFabTypewriterDone() {
+      return new Promise((resolve) => {
+        const t = setInterval(() => {
+          if (fabTwShown.length >= fabTwTarget.length) {
+            clearInterval(t);
+            resolve();
+          }
+        }, 45);
+      });
+    }
+    async function playPcmB64Queue(chunks) {
+      if (!chunks || !chunks.length) return;
+      const ACtx = window.AudioContext || window.webkitAudioContext;
+      const ac = new ACtx();
+      await ac.resume().catch(() => {});
+      let playHead = ac.currentTime;
+      for (let i = 0; i < chunks.length; i++) {
+        const ch = chunks[i];
+        const sr = ch.sample_rate || 24000;
+        const f32 = _decodeS16lePcmFromB64(ch.b64);
+        const ab = ac.createBuffer(1, f32.length, sr);
+        ab.getChannelData(0).set(f32);
+        const src = ac.createBufferSource();
+        src.buffer = ab;
+        src.connect(ac.destination);
+        const t0 = Math.max(ac.currentTime, playHead);
+        src.start(t0);
+        playHead = t0 + ab.duration;
+      }
+      const tailMs = Math.max(0, (playHead - ac.currentTime) * 1000);
+      if (tailMs > 0) await new Promise((r) => setTimeout(r, tailMs + 80));
+      await ac.close().catch(() => {});
+    }
+
+    /** POST /api/assistant/stream：SSE text_delta + 可选 audio_pcm_b64（火山双向流式 TTS） */
+    async function runAssistantStreamSse(opts) {
+      const {
+        userTxt, who, sessionId, meetingSessionId, useTts, onTextDelta, onFabDelta,
+        deferAudio = false,
+      } = opts;
+      const resp = await fetch('/api/assistant/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: userTxt,
+          session_id: sessionId,
+          speaker: who || '',
+          use_tts: !!useTts,
+          meeting_session_id: meetingSessionId || sessionId,
+        }),
+      });
+      if (!resp.ok) {
+        const errTxt = await resp.text().catch(() => '');
+        throw new Error((errTxt && errTxt.slice(0, 500)) || ('HTTP ' + resp.status));
+      }
+      const reader = resp.body && resp.body.getReader();
+      if (!reader) throw new Error('响应不支持流式读取');
+      const dec = new TextDecoder();
+      let carry = '';
+      let full = '';
+      let usedStreamTts = false;
+      let doneEv = null;
+      const deferredPcm = deferAudio && useTts ? [] : null;
+
+      let ac = null;
+      let playHead = 0;
+      let pcmSampleRate = 24000;
+      if (useTts && !deferAudio) {
+        const ACtx = window.AudioContext || window.webkitAudioContext;
+        ac = new ACtx();
+        await ac.resume().catch(() => {});
+        playHead = ac.currentTime;
+      }
+
+      const playF32 = (f32, sr) => {
+        if (!ac) return;
+        const ab = ac.createBuffer(1, f32.length, sr);
+        ab.getChannelData(0).set(f32);
+        const src = ac.createBufferSource();
+        src.buffer = ab;
+        src.connect(ac.destination);
+        const t0 = Math.max(ac.currentTime, playHead);
+        src.start(t0);
+        playHead = t0 + ab.duration;
+      };
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          carry += dec.decode(value, { stream: true });
+          for (;;) {
+            const ix = carry.indexOf('\n\n');
+            if (ix < 0) break;
+            const block = carry.slice(0, ix);
+            carry = carry.slice(ix + 2);
+            const lines = block.split('\n');
+            for (const line of lines) {
+              const m = line.match(/^data:\s*(.*)$/);
+              if (!m) continue;
+              let ev;
+              try { ev = JSON.parse(m[1]); } catch (_) { continue; }
+              if (ev.type === 'text_delta') {
+                full += (ev.content || '');
+                if (typeof onTextDelta === 'function') onTextDelta(full);
+                else if (typeof onFabDelta === 'function') onFabDelta(full);
+                // 流式每个 delta 只更新 FAB；若同步灌 chat 会每条 delta 都 push，右栏会刷屏
+                else showFabBubble(userTxt, full || '…', { skipChat: true });
+              } else if (ev.type === 'audio_pcm_b64' && ev.b64) {
+                usedStreamTts = true;
+                pcmSampleRate = ev.sample_rate || pcmSampleRate;
+                if (deferredPcm) {
+                  deferredPcm.push({ b64: ev.b64, sample_rate: pcmSampleRate || 24000 });
+                } else {
+                  playF32(_decodeS16lePcmFromB64(ev.b64), pcmSampleRate);
+                }
+              } else if (ev.type === 'done') {
+                doneEv = ev;
+                if (ev.full_text != null) full = ev.full_text;
+              } else if (ev.type === 'error') {
+                throw new Error(ev.message || '助手流式错误');
+              }
+            }
+          }
+        }
+      } finally {
+        if (ac) {
+          const tailMs = Math.max(0, (playHead - ac.currentTime) * 1000);
+          if (tailMs > 0) await new Promise((r) => setTimeout(r, tailMs + 80));
+          await ac.close().catch(() => {});
+        }
+      }
+      if (doneEv && doneEv.full_text != null) full = doneEv.full_text;
+      return { fullText: full, usedStreamTts, deferredPcm: deferredPcm || [] };
+    }
+
+    async function flushWakeUtterance(force) {
+      if (wakePhase !== 'LISTENING') return;
+      if (wakeListenTimer) { clearTimeout(wakeListenTimer); wakeListenTimer = null; }
+      const total = wakeListenBuf.reduce((s, a) => s + a.length, 0);
+      const rate = sharedMic.sampleRate;
+      if (!force && total < rate * WAKE_MIN_SEC) {
+        wakePhase = 'LISTENING';
+        const remain = Math.max(1500, WAKE_MAX_SEC * 1000 - (Date.now() - wakeListenStartTs));
+        wakeListenTimer = setTimeout(() => flushWakeUtterance(true), remain);
+        return;
+      }
+      wakePhase = 'RECOGNIZING';
+      setFabState('recognizing', '识别中…');
+      const pcm = new Float32Array(total);
+      let o = 0;
+      for (const a of wakeListenBuf) { pcm.set(a, o); o += a.length; }
+      wakeListenBuf = [];
+      const th = getThreshold();
+      const sid = wakeSessionId;
+      try {
+        const buf = pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength);
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort('timeout'), 30000);
+        const hwEl = $('settingHotword');
+        const hw = hwEl ? (hwEl.value || '').trim() : '';
+        const url = '/api/recognize_pcm?sample_rate=' + rate
+          + '&threshold=' + th
+          + '&session_id=' + sid
+          + (hw ? '&hotword=' + encodeURIComponent(hw) : '');
+        const r = await api(url, {
+          method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: buf, signal: ctrl.signal,
+        }).finally(() => clearTimeout(timer));
+        const who = r.speaker || '未知';
+        const txt = r.text || '';
+        if (!txt) {
+          showFabBubble('（未识别到内容）', '');
+        } else {
+          setFabState('answering', '小云回复中…');
+          const useTts = $('settingWakeTtsEnabled').checked;
+          const meetingSessionId = (state.liveRunning && state.liveSessionId) ? state.liveSessionId : sid;
+          if (useTts) {
+            try {
+              await unlockTtsPlayback();
+              fabTwShown = '';
+              fabTwTarget = '';
+              clearFabTypewriter();
+              $('fabUserText').textContent = txt;
+              $('fabBubble').classList.add('show');
+              const r = await runAssistantStreamSse({
+                userTxt: txt,
+                who,
+                sessionId: sid,
+                meetingSessionId,
+                useTts: true,
+                deferAudio: true,
+                onFabDelta: (full) => {
+                  fabTwTarget = full;
+                  ensureFabTypewriter();
+                },
+              });
+              const reply = (r.fullText || '').trim();
+              const replyShown = reply || '（模型无回复）';
+              fabTwTarget = replyShown;
+              ensureFabTypewriter();
+              await waitFabTypewriterDone();
+              clearFabTypewriter();
+              fabTwShown = replyShown;
+              showFabBubble(txt, replyShown);
+              if (r.deferredPcm && r.deferredPcm.length) {
+                setFabTtsState('playing');
+                await playPcmB64Queue(r.deferredPcm);
+                setFabTtsState('done');
+              } else if (!r.usedStreamTts && reply) {
+                setFabTtsState('playing');
+                await playTts(reply, sid);
+              } else {
+                setFabTtsState('off');
+              }
+            } catch (err) {
+              clearFabTypewriter();
+              console.warn('[assistant/stream]', err);
+              setFabTtsState('error');
+              toast('助手流式失败：' + (err && err.message ? err.message : '未知错误'), 4000);
+              showFabBubble(txt, '（回复失败）');
+            }
+          } else {
+            const ar = await api('/api/assistant/reply', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                text: txt,
+                session_id: sid,
+                speaker: who,
+                use_tts: false,
+                meeting_session_id: meetingSessionId,
+              }),
+            });
+            const reply = (ar.assistant_text || '').trim();
+            const replyShown = reply || '（模型无回复）';
+            fabTwShown = '';
+            fabTwTarget = '';
+            clearFabTypewriter();
+            $('fabUserText').textContent = txt;
+            $('fabBubble').classList.add('show');
+            fabTwTarget = replyShown;
+            ensureFabTypewriter();
+            await waitFabTypewriterDone();
+            clearFabTypewriter();
+            fabTwShown = replyShown;
+            showFabBubble(txt, replyShown);
+            if (reply) setFabTtsState('off');
+          }
+        }
+      } catch (e) {
+        const msg = (e && (e.name === 'AbortError' || /abort/i.test(e.message || ''))) ? '识别超时' :
+          ('识别失败：' + (e && e.message ? e.message : '未知错误'));
+        showFabBubble('', msg);
+      } finally {
+        if (wakeRunning) {
+          wakePhase = 'MONITORING';
+          setFabState('monitoring', '监听中…');
+          startKwsPoll();
+        } else {
+          wakePhase = 'IDLE';
+          setFabState('idle');
+        }
+      }
+    }
+
+    let ttsUnlocked = false;
+    function timeoutPromise(ms) { return new Promise((res) => setTimeout(res, ms)); }
+    async function unlockTtsPlayback() {
+      if (ttsUnlocked) return true;
+      try {
+        const ACtx = window.AudioContext || window.webkitAudioContext;
+        if (!ACtx) return false;
+        const ctx = new ACtx();
+        await Promise.race([ctx.resume().catch(() => {}), timeoutPromise(300)]);
+        await ctx.close().catch(() => {});
+        ttsUnlocked = true; return true;
+      } catch (_) { return false; }
+    }
+
+    async function playWakeAck() {
+      const rel = (wakeAckAudioRel || '').trim();
+      if (!rel) return;
+      const url = '/' + rel.split('/').map(encodeURIComponent).join('/');
+      /** 仅在预制音结束（或加载/播放失败）之后启动：此后若干毫秒内不因静音结束拾音 */
+      const finishAck = () => {
+        wakePostAckGraceUntil = Date.now() + WAKE_POST_ACK_GRACE_MS;
+        bumpWakeListenTimerAfterAck();
+      };
+      try {
+        if (currentWakeAckAudio) {
+          try { currentWakeAckAudio.pause(); } catch (_) {}
+          currentWakeAckAudio = null;
+        }
+        await unlockTtsPlayback();
+        const audio = new Audio(url);
+        currentWakeAckAudio = audio;
+        await audio.play();
+        await new Promise((resolve) => {
+          const fin = () => {
+            if (currentWakeAckAudio === audio) currentWakeAckAudio = null;
+            finishAck();
+            resolve();
+          };
+          audio.addEventListener('ended', fin, { once: true });
+          audio.addEventListener('error', fin, { once: true });
+        });
+      } catch (_) {
+        finishAck();
+      }
+    }
+
+    let currentTtsAudio = null;
+    async function playTts(text, sessionId) {
+      try {
+        const resp = await fetch('/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, session_id: sessionId || 'default' }),
+        });
+        if (!resp.ok) {
+          const body = await resp.text().catch(() => '');
+          setFabTtsState('error');
+          toast('TTS 请求失败：' + (body || resp.status), 3000);
+          console.warn('[tts] request failed', resp.status, body);
+          return false;
+        }
+        const blob = await resp.blob();
+        if (!blob || !blob.size) {
+          setFabTtsState('error'); toast('TTS 返回空音频', 3000);
+          return false;
+        }
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        currentTtsAudio = audio; // 保活，避免 GC
+        audio.onended = () => { URL.revokeObjectURL(url); setFabTtsState('done'); if (currentTtsAudio === audio) currentTtsAudio = null; };
+        audio.onerror = (e) => { console.warn('[tts] audio error', e); setFabTtsState('error'); toast('TTS 音频格式不支持或解码失败', 3000); };
+        try {
+          await audio.play();
+        } catch (e) {
+          console.warn('[tts] play blocked', e);
+          setFabTtsState('error');
+          toast('TTS 被浏览器拦截，请先与页面交互一次', 3500);
+          return false;
+        }
+        return true;
+      } catch (e) {
+        console.warn('[tts] exception', e);
+        setFabTtsState('error');
+        toast('TTS 异常：' + (e && e.message ? e.message : '未知'), 3000);
+        return false;
+      }
+    }
+
+    async function enableWake() {
+      if (wakeRunning) return;
+      setFabState('monitoring', '启动中…');
+      try {
+        await Promise.race([unlockTtsPlayback(), timeoutPromise(500)]).catch(() => {});
+        wakeSubCb = await sharedMic.subscribe((frame, rate) => {
+          if (!wakeRunning) return;
+          if (wakePhase === 'MONITORING') {
+            wakePushSamples(frame);
+          } else if (wakePhase === 'LISTENING') {
+            wakeListenBuf.push(frame);
+            let rms = 0;
+            for (let i = 0; i < frame.length; i++) rms += frame[i] * frame[i];
+            rms = Math.sqrt(rms / frame.length);
+            const silThresh = parseFloat($('settingSilenceThresh').value) || 0.01;
+            // worklet 约 100ms 一帧；按实际帧长换算
+            const framesPerSec = rate / Math.max(1, frame.length);
+            const silFrameThresh = Math.max(1, Math.ceil((WAKE_SIL_MS / 1000) * framesPerSec));
+            const listenedSec = wakeListenBuf.reduce((s, a) => s + a.length, 0) / rate;
+            const inPostAckGrace = Date.now() < wakePostAckGraceUntil;
+            if (inPostAckGrace) {
+              wakeSilenceFrames = 0;
+            } else if (rms < silThresh) {
+              wakeSilenceFrames++;
+              if (wakeSilenceFrames >= silFrameThresh && listenedSec >= WAKE_MIN_SEC) {
+                flushWakeUtterance(false);
+              }
+            } else {
+              wakeSilenceFrames = 0;
+            }
+          }
+        });
+        wakeSessionId = 'wake_' + Date.now();
+        wakeRunning = true; wakePhase = 'MONITORING';
+        wakeInitRing(sharedMic.sampleRate);
+        startKwsPoll();
+        setFabState('monitoring', '监听中…');
+      } catch (e) {
+        if (wakeSubCb) { sharedMic.unsubscribe(wakeSubCb); wakeSubCb = null; }
+        wakeRunning = false; wakePhase = 'IDLE';
+        setFabState('idle', '随会议录音开启唤醒监听');
+        toast('启动唤醒失败：' + (e && e.message ? e.message : '未知错误'));
+      }
+    }
+    function disableWake() {
+      wakeRunning = false; wakePhase = 'IDLE';
+      wakePostAckGraceUntil = 0;
+      if (kwsPollTimer) { clearInterval(kwsPollTimer); kwsPollTimer = null; }
+      if (wakeListenTimer) { clearTimeout(wakeListenTimer); wakeListenTimer = null; }
+      if (wakeSubCb) { sharedMic.unsubscribe(wakeSubCb); wakeSubCb = null; }
+      setFabState('idle', '随会议录音开启唤醒监听');
+    }
+
+    // ═══════════════════════════════════════════════════
+    // 8) 设置抽屉：服务状态 / 阈值 / 声纹注册 / 唤醒阈值 / VAD
+    // ═══════════════════════════════════════════════════
+    function openDrawer() {
+      $('drawer').classList.add('show');
+      $('drawerOverlay').classList.add('show');
+      refreshHealth();
+      refreshSpeakers();
+    }
+    function closeDrawer() {
+      $('drawer').classList.remove('show');
+      $('drawerOverlay').classList.remove('show');
+    }
+    $('btnOpenSettings').onclick = openDrawer;
+    $('btnCloseDrawer').onclick = closeDrawer;
+    $('drawerOverlay').onclick = closeDrawer;
+
+    async function refreshHealth() {
+      const grid = $('healthGrid');
+      grid.innerHTML = '<div class="health-card"><div class="k">状态</div><div class="v">加载中…</div></div>';
+      try {
+        const h = await api('/api/health');
+        wakeAckAudioRel = typeof h.wake_ack_audio === 'string' ? h.wake_ack_audio.trim() : '';
+        if (h.kws_keywords) {
+          $('settingKwsKeywords').textContent = h.kws_keywords;
+          $('settingKwsKeywordsInput').value = h.kws_keywords;
+        }
+        if (h.kws_threshold) {
+          $('settingKwsThreshold').value = h.kws_threshold;
+          $('settingKwsThresholdVal').textContent = Number(h.kws_threshold).toFixed(2);
+        }
+        const cards = [
+          ['声纹模型', h.model_ready ? ['ok', '已就绪'] : ['warn', '加载中']],
+          ['ASR', h.asr_ready ? ['ok', (() => {
+            const p = String(h.asr_provider || '');
+            if (p === 'volcengine/bigmodel') return '火山 · 豆包大模型';
+            if (p === 'volcengine/common' || p === 'volcengine') return '火山 · 通用流式';
+            if (p.startsWith('volcengine')) return '火山云端';
+            return h.funasr_local_weights ? '本地权重' : 'Hub 模型';
+          })()] : ['warn', '待加载']],
+          ['存储', h.persistence === 'postgresql' ? ['ok', 'PostgreSQL'] : ['warn', '内存']],
+          ['设备', ['ok', String(h.device || '—')]],
+          ['LLM 纠错', h.llm_correction ? ['ok', '开启'] : ['warn', '关闭']],
+          ['已注册', ['ok', (h.speakers || []).length + ' 人']],
+        ];
+        grid.innerHTML = cards.map(([k, [cls, v]]) =>
+          '<div class="health-card"><div class="k">' + escHtml(k) + '</div><div class="v ' + cls + '">' + escHtml(v) + '</div></div>'
+        ).join('');
+      } catch (e) {
+        grid.innerHTML = '<div class="health-card"><div class="k">状态</div><div class="v down">无法连接：' + escHtml(e.message) + '</div></div>';
+      }
+    }
+    async function refreshSpeakers() {
+      const el = $('speakerList');
+      try {
+        const { speakers } = await api('/api/speakers');
+        if (!speakers.length) { el.innerHTML = '<span style="color:var(--muted);font-size:0.8rem;">（暂无）</span>'; return; }
+        el.innerHTML = speakers.map((n) =>
+          '<span class="tag">' + escHtml(n) + '<button data-del="' + encodeURIComponent(n) + '" title="删除">×</button></span>'
+        ).join('');
+        el.querySelectorAll('button[data-del]').forEach((b) => {
+          b.onclick = async () => {
+            const name = decodeURIComponent(b.getAttribute('data-del'));
+            if (!confirm('删除「' + name + '」？')) return;
+            await api('/api/speakers/' + encodeURIComponent(name), { method: 'DELETE' });
+            await refreshSpeakers();
+            await refreshHealth();
+            toast('已删除 ' + name);
+          };
+        });
+      } catch (e) {
+        el.textContent = '错误：' + e.message;
+      }
+    }
+    $('btnRefreshHealth').onclick = () => { refreshHealth(); refreshSpeakers(); };
+    $('btnSpeakersRefresh').onclick = () => { refreshSpeakers(); };
+
+    // 阈值滑杆
+    $('settingThreshold').oninput = (e) => {
+      $('settingThresholdVal').textContent = Number(e.target.value).toFixed(2);
+    };
+    $('settingKwsThreshold').oninput = (e) => {
+      $('settingKwsThresholdVal').textContent = Number(e.target.value).toFixed(2);
+    };
+
+    // ── 热词：localStorage 持久化 + 计数提示 ──────────────────────────
+    (() => {
+      const HOTWORD_KEY = 'echopass.hotword.v1';
+      const HOTWORD_SPLIT = /[\s,，、;；]+/;
+      const HOTWORD_MAX = 50;
+      const input = $('settingHotword');
+      const hint = $('hotwordHint');
+      if (!input) return;
+
+      const parse = (s) => (s || '').split(HOTWORD_SPLIT).map(w => w.trim()).filter(Boolean);
+      const updateHint = () => {
+        if (!hint) return;
+        const words = parse(input.value);
+        const n = words.length;
+        if (n === 0) {
+          hint.textContent = '建议 ≤ 50 个词；留空则不启用。热词会作为上下文下发，明显提升会议专有名词命中率。';
+          hint.style.color = 'var(--muted)';
+        } else if (n <= HOTWORD_MAX) {
+          hint.textContent = `已生效 ${n} 个热词（上限 ${HOTWORD_MAX}）；保存在本地浏览器，刷新后仍可用。`;
+          hint.style.color = 'var(--muted)';
+        } else {
+          hint.textContent = `已输入 ${n} 个词，超过 ${HOTWORD_MAX} 个会被自动截断，建议精简后再保存。`;
+          hint.style.color = '#f0a050';
+        }
+      };
+
+      try {
+        const saved = localStorage.getItem(HOTWORD_KEY);
+        if (saved !== null) input.value = saved;
+      } catch (_) { /* 隐私模式可能禁用 localStorage，忽略 */ }
+      updateHint();
+
+      input.addEventListener('input', () => {
+        try { localStorage.setItem(HOTWORD_KEY, input.value); } catch (_) {}
+        updateHint();
+      });
+    })();
+
+    // 注册声纹
+    let enrollCtx = null, enrollProc = null, enrollStream = null, enrollBuf = [];
+    function stopEnrollMic() {
+      if (enrollProc) { enrollProc.disconnect(); enrollProc = null; }
+      if (enrollCtx) { enrollCtx.close(); enrollCtx = null; }
+      if (enrollStream) { enrollStream.getTracks().forEach((t) => t.stop()); enrollStream = null; }
+      enrollBuf = [];
+      $('btnEnrollRec').disabled = false;
+      $('btnEnrollStop').disabled = true;
+    }
+    $('btnEnrollRec').onclick = async () => {
+      stopEnrollMic();
+      try {
+        enrollCtx = new AudioContext();
+        enrollStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const src = enrollCtx.createMediaStreamSource(enrollStream);
+        enrollProc = enrollCtx.createScriptProcessor(4096, 1, 1);
+        enrollBuf = [];
+        enrollProc.onaudioprocess = (e) => {
+          enrollBuf.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+        };
+        const g = enrollCtx.createGain(); g.gain.value = 0;
+        src.connect(enrollProc); enrollProc.connect(g); g.connect(enrollCtx.destination);
+        $('btnEnrollRec').disabled = true;
+        $('btnEnrollStop').disabled = false;
+        $('enrollRecState').textContent = '录音中…';
+      } catch (e) {
+        $('enrollRecState').textContent = '启动失败：' + e.message;
+      }
+    };
+    $('btnEnrollStop').onclick = async () => {
+      $('enrollRecState').textContent = '上传中…';
+      const rate = enrollCtx ? enrollCtx.sampleRate : 48000;
+      const total = enrollBuf.reduce((s, a) => s + a.length, 0);
+      const pcm = new Float32Array(total);
+      let o = 0;
+      for (const a of enrollBuf) { pcm.set(a, o); o += a.length; }
+      stopEnrollMic();
+      const name = $('settingEnrollName').value.trim();
+      if (!name) { $('enrollRecState').textContent = '请填写名称'; return; }
+      const fd = new FormData();
+      fd.append('name', name);
+      fd.append('audio', encodeWav(pcm, rate), 'enroll.wav');
+      try {
+        const r = await api('/api/enroll', { method: 'POST', body: fd });
+        $('enrollOut').style.display = 'block';
+        $('enrollOut').textContent = JSON.stringify(r, null, 2);
+        $('enrollRecState').textContent = '已注册';
+        await refreshSpeakers(); await refreshHealth();
+      } catch (e) {
+        $('enrollRecState').textContent = '失败：' + e.message;
+      }
+    };
+    $('btnEnrollUpload').onclick = async () => {
+      const f = $('settingEnrollFile').files[0];
+      const name = $('settingEnrollName').value.trim();
+      if (!name) { toast('请填写名称'); return; }
+      if (!f) { toast('请选择文件'); return; }
+      const fd = new FormData();
+      fd.append('name', name); fd.append('audio', f);
+      try {
+        const r = await api('/api/enroll', { method: 'POST', body: fd });
+        $('enrollOut').style.display = 'block';
+        $('enrollOut').textContent = JSON.stringify(r, null, 2);
+        await refreshSpeakers(); await refreshHealth();
+        toast('已注册 ' + name);
+      } catch (e) { toast('失败：' + e.message); }
+    };
+
+    // ═══════════════════════════════════════════════════
+    // 9) WebSocket 控制通道
+    // ═══════════════════════════════════════════════════
+    function connectWs() {
+      const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+      state.wsCtl = new WebSocket(proto + location.host + '/ws/control?session_id=global');
+      state.wsCtl.onopen = () => { $('wsState').textContent = 'WS：已连接'; };
+      state.wsCtl.onclose = () => {
+        $('wsState').textContent = 'WS：已断开，重连中…';
+        setTimeout(connectWs, 1500);
+      };
+      state.wsCtl.onmessage = (ev) => {
+        try {
+          const m = JSON.parse(ev.data);
+          if (m.type === 'wakeword_detected') {
+            setFabState('woken', '已唤醒');
+          } else if (m.type === 'meeting_summary_ready') {
+            state.summaryLastTs = Date.now();
+          } else if (m.type === 'tts_started') {
+            setFabTtsState('playing');
+          } else if (m.type === 'tts_finished') {
+            setFabTtsState('done');
+          }
+        } catch (_) {}
+      };
+    }
+
+    // ═══════════════════════════════════════════════════
+    // 10) 中栏 Tab 切换
+    // ═══════════════════════════════════════════════════
+    const MID_TAB_TITLES = {
+      transcript: '实时转录',
+      summary: 'AI 实时纪要',
+      chapters: '章节',
+      speakers: '发言人占比',
+    };
+    function initTabs() {
+      document.querySelectorAll('.tab-btn').forEach((btn) => {
+        btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab')));
+      });
+    }
+    function switchTab(name) {
+      if (!MID_TAB_TITLES[name]) return;
+      state.midTab = name;
+      document.querySelectorAll('.tab-btn').forEach((b) => {
+        const active = b.getAttribute('data-tab') === name;
+        b.classList.toggle('active', active);
+        if (active) b.setAttribute('aria-selected', 'true'); else b.removeAttribute('aria-selected');
+      });
+      document.querySelectorAll('.tab-pane').forEach((p) => {
+        p.classList.toggle('active', p.id === 'pane' + name.charAt(0).toUpperCase() + name.slice(1));
+      });
+      $('midTitle').textContent = MID_TAB_TITLES[name];
+      $('summaryToolbar').style.display = (name === 'summary') ? '' : 'none';
+      if (name === 'summary') renderSummary();
+      else if (name === 'chapters') {
+        renderChapters();
+        // 第一次切到章节 Tab 且有转录、还没生成过 → 自动触发一次
+        if (!state.chaptersData && !state.chaptersInFlight && state.transcriptLines.length > 0) {
+          requestChapters();
+        }
+      }
+      else if (name === 'speakers') renderSpeakersStats();
+      else if (name === 'transcript') renderTranscript();
+    }
+
+    // ═══════════════════════════════════════════════════
+    // 11) 左栏 · 整场音频播放器（进度条 + 波形 + ±15s + 速率）
+    // ═══════════════════════════════════════════════════
+    function fmtMS(sec) {
+      sec = Math.max(0, Math.floor(sec || 0));
+      const m = Math.floor(sec / 60), s = sec % 60;
+      if (m >= 60) {
+        const h = Math.floor(m / 60), mm = m % 60;
+        return pad2(h) + ':' + pad2(mm) + ':' + pad2(s);
+      }
+      return pad2(m) + ':' + pad2(s);
+    }
+
+    function resetAudioPlayer() {
+      const audio = $('sessionAudio');
+      try { audio.pause(); } catch (_) {}
+      if (state.audioUrl) { try { URL.revokeObjectURL(state.audioUrl); } catch (_) {} state.audioUrl = null; }
+      audio.removeAttribute('src');
+      audio.load && audio.load();
+      $('audioCur').textContent = '00:00';
+      $('audioDur').textContent = '00:00';
+      $('audioFill').style.width = '0%';
+      const rng = $('audioRange'); rng.value = 0; rng.disabled = true;
+      $('btnAudioBack15').disabled = true;
+      $('btnAudioFwd15').disabled = true;
+      $('btnAudioPlay').disabled = true;
+      $('btnAudioSpeed').disabled = true;
+      state.audioPlayRateIdx = 0;
+      $('btnAudioSpeed').textContent = '1x';
+      setAudioPlayingIcon(false);
+      $('waveformEmpty').style.display = '';
+      drawWaveform();
+    }
+
+    function finalizeAudioPlayer() {
+      const blob = recTrack.buildWavBlob();
+      if (!blob) return;
+      if (state.audioUrl) { try { URL.revokeObjectURL(state.audioUrl); } catch (_) {} }
+      state.audioUrl = URL.createObjectURL(blob);
+      const audio = $('sessionAudio');
+      audio.src = state.audioUrl;
+      audio.playbackRate = state.audioPlayRates[state.audioPlayRateIdx];
+      $('audioRange').disabled = false;
+      $('btnAudioPlay').disabled = false;
+      $('btnAudioBack15').disabled = false;
+      $('btnAudioFwd15').disabled = false;
+      $('btnAudioSpeed').disabled = false;
+      const dur = recTrack.durationSec;
+      $('audioDur').textContent = fmtMS(dur);
+    }
+
+    function setAudioPlayingIcon(playing) {
+      const ic = $('audioPlayIcon');
+      if (!ic) return;
+      ic.innerHTML = playing
+        ? '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>'
+        : '<path d="M8 5v14l11-7L8 5z"/>';
+    }
+
+    function audioCurrentSec() {
+      const audio = $('sessionAudio');
+      return Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+    }
+    function audioTotalSec() {
+      const audio = $('sessionAudio');
+      const d = audio.duration;
+      if (Number.isFinite(d) && d > 0) return d;
+      return recTrack.durationSec || 0;
+    }
+
+    function syncAudioUi() {
+      const cur = audioCurrentSec();
+      const dur = audioTotalSec();
+      $('audioCur').textContent = fmtMS(cur);
+      if (dur > 0) $('audioDur').textContent = fmtMS(dur);
+      const pct = dur > 0 ? Math.min(1, cur / dur) : 0;
+      $('audioFill').style.width = (pct * 100).toFixed(2) + '%';
+      if (!state.audioSeeking) $('audioRange').value = String(Math.round(pct * 1000));
+      // 高亮当前发言条
+      const ms = cur * 1000;
+      let idx = -1;
+      for (let i = 0; i < state.transcriptLines.length; i++) {
+        const l = state.transcriptLines[i];
+        const s = l.start_ms || 0;
+        const e = l.end_ms || (s + Math.round((l.duration_sec || 0) * 1000));
+        if (ms >= s && (e === 0 || ms <= e + 600)) { idx = i; }
+      }
+      if (idx !== state.activeLineIdx) {
+        state.activeLineIdx = idx;
+        renderTimelineList();
+      }
+      drawWaveform();
+    }
+
+    function seekAudioTo(sec) {
+      const audio = $('sessionAudio');
+      const dur = audioTotalSec();
+      if (!dur) return;
+      audio.currentTime = Math.max(0, Math.min(dur - 0.01, sec));
+      syncAudioUi();
+    }
+
+    function initAudioPlayer() {
+      const audio = $('sessionAudio');
+      audio.addEventListener('loadedmetadata', () => syncAudioUi());
+      audio.addEventListener('durationchange', () => syncAudioUi());
+      audio.addEventListener('timeupdate', () => syncAudioUi());
+      audio.addEventListener('play', () => { setAudioPlayingIcon(true); });
+      audio.addEventListener('pause', () => { setAudioPlayingIcon(false); });
+      audio.addEventListener('ended', () => { setAudioPlayingIcon(false); });
+
+      $('btnAudioPlay').addEventListener('click', () => {
+        if (audio.paused) audio.play().catch(() => toast('无法播放音频'));
+        else audio.pause();
+      });
+      $('btnAudioBack15').addEventListener('click', () => seekAudioTo(audioCurrentSec() - 15));
+      $('btnAudioFwd15').addEventListener('click', () => seekAudioTo(audioCurrentSec() + 15));
+      $('btnAudioSpeed').addEventListener('click', () => {
+        state.audioPlayRateIdx = (state.audioPlayRateIdx + 1) % state.audioPlayRates.length;
+        const r = state.audioPlayRates[state.audioPlayRateIdx];
+        audio.playbackRate = r;
+        $('btnAudioSpeed').textContent = (r % 1 === 0 ? r.toFixed(0) : r.toFixed(2).replace(/0$/, '')) + 'x';
+      });
+      const rng = $('audioRange');
+      rng.addEventListener('input', () => {
+        state.audioSeeking = true;
+        const dur = audioTotalSec();
+        const pct = parseInt(rng.value, 10) / 1000;
+        $('audioFill').style.width = (pct * 100).toFixed(2) + '%';
+        $('audioCur').textContent = fmtMS(pct * dur);
+      });
+      rng.addEventListener('change', () => {
+        const dur = audioTotalSec();
+        const pct = parseInt(rng.value, 10) / 1000;
+        seekAudioTo(pct * dur);
+        state.audioSeeking = false;
+      });
+
+      // 波形 canvas resize
+      const cv = $('waveform');
+      const fitCanvas = () => {
+        const dpr = window.devicePixelRatio || 1;
+        const rect = cv.getBoundingClientRect();
+        cv.width = Math.max(1, Math.floor(rect.width * dpr));
+        cv.height = Math.max(1, Math.floor(rect.height * dpr));
+        state.waveformCtx = cv.getContext('2d');
+        state.waveformCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        drawWaveform();
+      };
+      fitCanvas();
+      window.addEventListener('resize', fitCanvas);
+    }
+
+    function drawWaveform() {
+      const cv = $('waveform');
+      if (!cv || !state.waveformCtx) return;
+      const ctx = state.waveformCtx;
+      const w = cv.clientWidth, h = cv.clientHeight;
+      ctx.clearRect(0, 0, w, h);
+      const peaks = recTrack.peaks;
+      const totalDur = audioTotalSec();
+      const empty = $('waveformEmpty');
+      if (!peaks.length) { if (empty) empty.style.display = ''; return; }
+      if (empty) empty.style.display = 'none';
+
+      const cur = audioCurrentSec();
+      const dur = totalDur || (peaks.length * 0.1);
+      const N = w; // 1 列像素一个 bar
+      const peaksPerBar = Math.max(1, Math.ceil(peaks.length / N));
+      const playedFrac = dur > 0 ? Math.min(1, cur / dur) : 0;
+      const playedX = playedFrac * w;
+
+      const cy = h / 2;
+      ctx.lineCap = 'round';
+      for (let x = 0; x < N; x++) {
+        let p = 0, cnt = 0;
+        const start = x * peaksPerBar;
+        const end = Math.min(peaks.length, start + peaksPerBar);
+        if (start >= peaks.length) break;
+        for (let i = start; i < end; i++) { if (peaks[i] > p) p = peaks[i]; cnt++; }
+        if (!cnt) continue;
+        const amp = Math.max(1.5, p * (h * 0.46));
+        const isPlayed = x <= playedX;
+        ctx.strokeStyle = isPlayed
+          ? 'rgba(122, 92, 255, 0.95)'
+          : 'rgba(255, 255, 255, 0.18)';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(x + 0.5, cy - amp);
+        ctx.lineTo(x + 0.5, cy + amp);
+        ctx.stroke();
+      }
+      // 当前位置指针
+      if (totalDur > 0) {
+        ctx.strokeStyle = 'rgba(61, 246, 255, 0.95)';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(playedX + 0.5, 2);
+        ctx.lineTo(playedX + 0.5, h - 2);
+        ctx.stroke();
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    // 12) 左栏 · 时间戳发言列表
+    // ═══════════════════════════════════════════════════
+    function renderTimelineList() {
+      const box = $('timelineList');
+      const lines = state.transcriptLines;
+      if (!lines.length) {
+        box.innerHTML = '<div class="timeline-empty" id="timelineEmpty">时间戳发言列表将实时出现在这里</div>';
+        return;
+      }
+      const parts = [];
+      for (let i = 0; i < lines.length; i++) {
+        const l = lines[i];
+        const who = l.who || '未知';
+        const color = speakerColor(who);
+        const initial = speakerInitial(who);
+        const start = (l.start_ms || 0) / 1000;
+        const preview = (l.text || '').replace(/\s+/g, ' ').slice(0, 18);
+        const isActive = i === state.activeLineIdx;
+        const dim = state.highlightedSpeaker && state.highlightedSpeaker !== who ? 'opacity:0.45;' : '';
+        parts.push(
+          '<div class="timeline-item' + (isActive ? ' active' : '') + '" data-idx="' + i + '" style="' + dim + '">' +
+            '<div class="avatar" style="background:' + color + '">' + escHtml(initial) + '</div>' +
+            '<div class="ti-body">' +
+              '<div class="ti-head">' +
+                '<span class="ti-name">' + escHtml(who) + '</span>' +
+                '<span class="ti-time">' + fmtMS(start) + '</span>' +
+              '</div>' +
+              '<div class="ti-preview">' + escHtml(preview) + '</div>' +
+            '</div>' +
+          '</div>'
+        );
+      }
+      box.innerHTML = parts.join('');
+      box.querySelectorAll('.timeline-item').forEach((node) => {
+        node.addEventListener('click', () => {
+          const idx = parseInt(node.getAttribute('data-idx'), 10);
+          const line = state.transcriptLines[idx];
+          if (!line) return;
+          if (state.audioUrl) {
+            seekAudioTo((line.start_ms || 0) / 1000);
+          } else {
+            // 录音进行中尚无完整 WAV，仅高亮联动
+            state.activeLineIdx = idx;
+            renderTimelineList();
+          }
+          // 联动中栏：切到转录 Tab，把对应气泡滚到视野
+          if (state.midTab !== 'transcript') switchTab('transcript');
+          requestAnimationFrame(() => {
+            const bubbles = document.querySelectorAll('#transcriptList .bubble');
+            const target = bubbles[idx];
+            if (target && target.scrollIntoView) {
+              target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              target.classList.add('current');
+              setTimeout(() => target.classList.remove('current'), 1500);
+            }
+          });
+        });
+      });
+    }
+
+    // ═══════════════════════════════════════════════════
+    // 13) 中栏 · 发言人占比 Tab
+    // ═══════════════════════════════════════════════════
+    function aggregateSpeakers() {
+      const map = new Map();
+      let totalSec = 0, totalChars = 0;
+      for (const l of state.transcriptLines) {
+        const who = l.who || '未知';
+        const dur = Math.max(0, l.duration_sec || 0);
+        const chars = (l.text || '').length;
+        const cur = map.get(who) || { who, dur: 0, count: 0, chars: 0, firstMs: Infinity };
+        cur.dur += dur;
+        cur.count += 1;
+        cur.chars += chars;
+        if ((l.start_ms || 0) < cur.firstMs) cur.firstMs = (l.start_ms || 0);
+        map.set(who, cur);
+        totalSec += dur;
+        totalChars += chars;
+      }
+      const arr = Array.from(map.values()).sort((a, b) => b.dur - a.dur || b.chars - a.chars);
+      return { speakers: arr, totalSec, totalChars };
+    }
+
+    function renderSpeakersStats() {
+      const box = $('speakersStats');
+      if (!box) return;
+      const { speakers, totalSec, totalChars } = aggregateSpeakers();
+      if (!speakers.length) {
+        box.innerHTML = '<div class="summary-placeholder"><span class="emoji">🧑‍🤝‍🧑</span>开始录音后，此处将按发言时长自动生成占比</div>';
+        return;
+      }
+      const denom = totalSec > 0 ? totalSec : Math.max(1, totalChars);
+      const useDuration = totalSec > 0;
+
+      // donut: 用 stroke-dasharray 拼弧段
+      const R = 36, C = 2 * Math.PI * R;
+      let acc = 0;
+      const segs = speakers.map((s) => {
+        const v = useDuration ? s.dur : s.chars;
+        const frac = denom > 0 ? v / denom : 0;
+        const len = frac * C;
+        const off = -acc;
+        acc += len;
+        return {
+          frac, len, off,
+          color: speakerColor(s.who),
+          who: s.who,
+        };
+      });
+      const donutSvg =
+        '<svg viewBox="0 0 100 100">' +
+          '<circle cx="50" cy="50" r="' + R + '" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="10"/>' +
+          segs.map((g) =>
+            '<circle cx="50" cy="50" r="' + R + '" fill="none" ' +
+              'stroke="' + g.color + '" stroke-width="10" ' +
+              'stroke-dasharray="' + g.len.toFixed(3) + ' ' + (C - g.len).toFixed(3) + '" ' +
+              'stroke-dashoffset="' + g.off.toFixed(3) + '" ' +
+              'transform="rotate(-90 50 50)" stroke-linecap="butt"/>'
+          ).join('') +
+        '</svg>';
+      const totalLabel = useDuration ? fmtMS(totalSec) : (totalChars + ' 字');
+      const hint = useDuration ? '总时长' : '总字数（无时长）';
+
+      const bars = speakers.map((s) => {
+        const v = useDuration ? s.dur : s.chars;
+        const pct = denom > 0 ? v / denom : 0;
+        const color = speakerColor(s.who);
+        const initial = speakerInitial(s.who);
+        const sub = (useDuration ? fmtMS(s.dur) : (s.chars + ' 字')) + ' · ' + s.count + ' 次发言' + (useDuration ? (' · ' + s.chars + ' 字') : '');
+        const isActive = state.highlightedSpeaker === s.who;
+        return (
+          '<div class="speaker-bar' + (isActive ? ' active' : '') + '" data-who="' + encodeURIComponent(s.who) + '">' +
+            '<div class="avatar" style="background:' + color + '">' + escHtml(initial) + '</div>' +
+            '<div class="info">' +
+              '<div class="row1"><span class="name">' + escHtml(s.who) + '</span><span class="pct">' + (pct * 100).toFixed(1) + '%</span></div>' +
+              '<div class="progress"><div class="fill" style="width:' + (pct * 100).toFixed(2) + '%;background:linear-gradient(90deg,' + color + ',var(--violet));"></div></div>' +
+              '<div class="sub">' + escHtml(sub) + '</div>' +
+            '</div>' +
+            '<div></div>' +
+          '</div>'
+        );
+      }).join('');
+
+      box.innerHTML =
+        '<div class="donut-wrap">' + donutSvg +
+          '<div class="donut-center"><div class="total">' + escHtml(totalLabel) + '</div><div class="hint">' + escHtml(hint) + '</div></div>' +
+        '</div>' +
+        '<div class="donut-spacer"></div>' +
+        bars;
+
+      box.querySelectorAll('.speaker-bar').forEach((node) => {
+        node.addEventListener('click', () => {
+          const who = decodeURIComponent(node.getAttribute('data-who'));
+          state.highlightedSpeaker = (state.highlightedSpeaker === who) ? null : who;
+          renderSpeakersStats();
+          renderTimelineList();
+        });
+      });
+    }
+
+    // ═══════════════════════════════════════════════════
+    // 14) 中栏 · 章节 Tab（AI 生成：精炼标题 + 2-4 句摘要 + 时间徽章）
+    //
+    // 数据流：state.chaptersData ← POST /api/meeting/chapters。
+    // 触发时机：用户点"立即生成"按钮；切到章节 Tab 时若数据为空且有转录则自动触发一次。
+    // 没数据时仍展示占位文案，强调要由 AI 生成。
+    // ═══════════════════════════════════════════════════
+
+    function _fmtRelTime(tsMs) {
+      if (!tsMs) return '';
+      const diff = Math.max(0, Date.now() - tsMs);
+      const sec = Math.round(diff / 1000);
+      if (sec < 60) return sec + ' 秒前';
+      const m = Math.floor(sec / 60);
+      if (m < 60) return m + ' 分钟前';
+      const h = Math.floor(m / 60);
+      if (h < 24) return h + ' 小时前';
+      return new Date(tsMs).toLocaleString();
+    }
+
+    function renderChapterToolbar() {
+      const meta = $('chapterMeta');
+      const btn = $('btnGenChapters');
+      const label = $('btnGenChaptersLabel');
+      if (!meta || !btn || !label) return;
+      const hasTranscript = state.transcriptLines.length > 0;
+      const inFlight = state.chaptersInFlight;
+
+      // 按钮禁用：无转录 / 正在请求中
+      btn.disabled = !hasTranscript || inFlight;
+      if (inFlight) {
+        label.innerHTML = '<span class="spin"></span> 正在生成…';
+      } else if (state.chaptersData && state.chaptersData.length) {
+        label.textContent = '重新生成';
+      } else {
+        label.textContent = '立即生成';
+      }
+
+      // 元信息：错误 > 已生成 > 转录数 > 默认
+      if (state.chaptersError) {
+        meta.innerHTML = '<b style="color:#ff8080">生成失败：</b>' + escHtml(state.chaptersError);
+      } else if (state.chaptersGeneratedAt) {
+        const cnt = state.chaptersData ? state.chaptersData.length : 0;
+        meta.innerHTML = '已生成 <b>' + cnt + '</b> 个章节 · 上次更新 <b>' + _fmtRelTime(state.chaptersGeneratedAt) + '</b>';
+      } else if (hasTranscript) {
+        meta.innerHTML = '当前共 <b>' + state.transcriptLines.length + '</b> 条转录，点击右侧按钮交给 AI 切章并起标题';
+      } else {
+        meta.textContent = '点击右侧按钮，让 AI 按话题切分章节并生成精炼标题';
+      }
+    }
+
+    function renderChapterList() {
+      const box = $('chapterList');
+      if (!box) return;
+      const chs = state.chaptersData || [];
+      if (!chs.length) {
+        if (state.chaptersInFlight) {
+          box.innerHTML = '<div class="summary-placeholder"><span class="emoji">⏳</span>AI 正在分析转录、提炼章节标题与摘要…</div>';
+        } else if (state.transcriptLines.length === 0) {
+          box.innerHTML = '<div class="summary-placeholder"><span class="emoji">📚</span>开始录音后点击"立即生成"，AI 会按话题切分章节并配上 2-4 句摘要</div>';
+        } else {
+          box.innerHTML = '<div class="summary-placeholder"><span class="emoji">📚</span>点击右上角"立即生成"，让 AI 按话题切分章节</div>';
+        }
+        return;
+      }
+      box.innerHTML = chs.map((c) => {
+        const startMs = c.start_ms || 0;
+        const endMs = c.end_ms || startMs;
+        const startSec = startMs / 1000;
+        const dur = Math.max(0, (endMs - startMs) / 1000);
+        const speakers = (c.speakers || []).filter(Boolean);
+        return (
+          '<div class="chapter-card" data-start="' + startMs + '">' +
+            '<div class="head">' +
+              '<span class="ts-badge" title="跳转到 ' + fmtMS(startSec) + '">' +
+                '<span class="play-icon"></span>' + fmtMS(startSec) +
+              '</span>' +
+              '<div class="title">' + escHtml(c.title || '（无标题）') + '</div>' +
+            '</div>' +
+            (c.summary ? '<div class="summary">' + escHtml(c.summary) + '</div>' : '') +
+            '<div class="footer">' +
+              (speakers.length ? '<span class="speakers">' + escHtml(speakers.join('、')) + '</span><span class="dot"></span>' : '') +
+              '<span>时长 ' + fmtMS(dur) + '</span>' +
+              (c.line_count ? '<span class="dot"></span><span>' + c.line_count + ' 段</span>' : '') +
+            '</div>' +
+          '</div>'
+        );
+      }).join('');
+      box.querySelectorAll('.chapter-card').forEach((node) => {
+        node.addEventListener('click', () => {
+          const startMs = parseInt(node.getAttribute('data-start'), 10) || 0;
+          if (state.audioUrl) seekAudioTo(startMs / 1000);
+          state.activeLineIdx = state.transcriptLines.findIndex((l) => (l.start_ms || 0) >= startMs);
+          renderTimelineList();
+        });
+      });
+    }
+
+    function renderChapters() {
+      renderChapterToolbar();
+      renderChapterList();
+    }
+
+    async function requestChapters() {
+      if (state.chaptersInFlight) return;
+      if (!state.transcriptLines.length) {
+        state.chaptersError = '当前没有转录文本，无法生成章节';
+        renderChapterToolbar();
+        return;
+      }
+      state.chaptersInFlight = true;
+      state.chaptersError = null;
+      renderChapters();
+      try {
+        const resp = await fetch('/api/meeting/chapters', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: 'default' }),
+        });
+        if (!resp.ok) {
+          throw new Error('HTTP ' + resp.status);
+        }
+        const data = await resp.json();
+        state.chaptersData = Array.isArray(data.chapters) ? data.chapters : [];
+        state.chaptersGeneratedAt = Date.now();
+      } catch (err) {
+        state.chaptersError = (err && err.message) || String(err);
+      } finally {
+        state.chaptersInFlight = false;
+        renderChapters();
+      }
+    }
+
+    // 章节工具条按钮：手动触发；切到章节 Tab 时若空则自动触发
+    document.addEventListener('DOMContentLoaded', () => {
+      const btn = document.getElementById('btnGenChapters');
+      if (btn) btn.addEventListener('click', requestChapters);
+    });
+
+    // ═══════════════════════════════════════════════════
+    // 15) 右栏 · AI 问答会话
+    // ═══════════════════════════════════════════════════
+    function renderChatHistory() {
+      const box = $('chatHistory');
+      if (!box) return;
+      if (!state.chatMessages.length) {
+        box.innerHTML =
+          '<div class="chat-msg bot">' +
+            '<div class="who">小云</div>' +
+            '<div class="bubble-box">👋 Hi，我可以帮你干点什么？</div>' +
+          '</div>';
+        return;
+      }
+      const parts = state.chatMessages.map((m) => {
+        const cls = m.role === 'user' ? 'user' : (m.typing ? 'bot typing' : 'bot');
+        const who = m.role === 'user' ? '你' : '小云';
+        return (
+          '<div class="chat-msg ' + cls + '">' +
+            '<div class="who">' + escHtml(who) + '</div>' +
+            '<div class="bubble-box">' + escHtml(m.text) + '</div>' +
+          '</div>'
+        );
+      });
+      box.innerHTML = parts.join('');
+      box.scrollTop = box.scrollHeight;
+    }
+
+    async function sendChat(rawText) {
+      const text = (rawText == null ? $('chatInput').value : rawText).trim();
+      if (!text || state.chatInFlight) return;
+      $('chatInput').value = '';
+      state.chatMessages.push({ role: 'user', text });
+      state.chatMessages.push({
+        role: 'bot', text: '', typing: true, _twTarget: '', _streamEnded: false,
+      });
+      renderChatHistory();
+      state.chatInFlight = true;
+      $('chatSend').disabled = true;
+      const sid = state.liveRunning ? state.liveSessionId : 'chat_' + (state.liveSessionId || 'default');
+      const meetingSessionId = state.liveSessionId || sid;
+      const useChatTts = $('settingWakeTtsEnabled').checked;
+      const botIdx = state.chatMessages.length - 1;
+      try {
+        if (useChatTts) await unlockTtsPlayback();
+        const r = await runAssistantStreamSse({
+          userTxt: text,
+          who: '我',
+          sessionId: sid,
+          meetingSessionId,
+          useTts: useChatTts,
+          deferAudio: !!useChatTts,
+          onTextDelta: (full) => {
+            const m = state.chatMessages[botIdx];
+            if (m && m.role === 'bot') {
+              m._twTarget = full || '';
+              if (!m.text && !full) m.text = '…';
+              ensureChatTypewriter(botIdx);
+            }
+          },
+        });
+        const reply = (r.fullText || '').trim() || '（模型无回复）';
+        const m = state.chatMessages[botIdx];
+        if (m && m.role === 'bot') {
+          m._twTarget = reply;
+          m._streamEnded = true;
+          ensureChatTypewriter(botIdx);
+          await waitChatTypewriterDone(botIdx);
+          clearChatTypewriter();
+          m.text = reply;
+          m.typing = false;
+        }
+        if (useChatTts && r.deferredPcm && r.deferredPcm.length) {
+          setFabTtsState('playing');
+          await playPcmB64Queue(r.deferredPcm);
+          setFabTtsState('done');
+        } else if (useChatTts && !r.usedStreamTts && reply && reply !== '（模型无回复）') {
+          setFabTtsState('playing');
+          await playTts(reply, sid);
+        }
+      } catch (e) {
+        clearChatTypewriter();
+        const m = state.chatMessages[botIdx];
+        if (m && m.role === 'bot') {
+          m.text = '出错了：' + (e && e.message ? e.message : '未知错误');
+          m.typing = false;
+        }
+      } finally {
+        clearChatTypewriter();
+        state.chatInFlight = false;
+        $('chatSend').disabled = false;
+        renderChatHistory();
+      }
+    }
+
+    function initChat() {
+      const send = () => sendChat(null);
+      $('chatSend').addEventListener('click', send);
+      $('chatInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); send(); }
+      });
+      $('btnChatClear').addEventListener('click', () => {
+        state.chatMessages = [];
+        renderChatHistory();
+      });
+      document.querySelectorAll('.chat-chip').forEach((chip) => {
+        chip.addEventListener('click', () => {
+          const kind = chip.getAttribute('data-chip');
+          if (kind === 'highlights') {
+            sendChat('请用 5 条 bullet 总结本场会议的重点内容，每条 30 字以内。');
+          }
+        });
+      });
+    }
+
+    // 重写 setFabState 把唤醒词状态同步到右栏标签
+    const _origSetFabState = setFabState;
+    setFabState = function(kind, label) {
+      _origSetFabState(kind, label);
+      const el = $('chatWakeState');
+      if (el) {
+        el.textContent = '小云小云 · ' + (label || ({
+          idle: '随会议录音开启唤醒监听',
+          monitoring: '监听中',
+          woken: '已唤醒',
+          recognizing: '识别中',
+          answering: '回答中',
+          error: '异常',
+        }[kind] || kind));
+      }
+    };
+
+    // 拦截唤醒词识别完成 → 把对话灌到右栏 chat
+    const _origShowFabBubble = showFabBubble;
+    /** @param opts {{ skipChat?: boolean }} skipChat：仅更新悬浮气泡，不写入右栏（流式 delta 用） */
+    showFabBubble = function(userText, replyText, opts) {
+      opts = opts || {};
+      _origShowFabBubble(userText, replyText);
+      if (opts.skipChat) return;
+      if (userText) state.chatMessages.push({ role: 'user', text: '🎙️ ' + userText });
+      if (replyText) state.chatMessages.push({ role: 'bot', text: replyText });
+      if (userText || replyText) renderChatHistory();
+    };
+
+    // ═══════════════════════════════════════════════════
+    // 16) 会议结束后导出 ZIP：原始音频 + 语音识别 + 最终纪要
+    // ═══════════════════════════════════════════════════
+
+    // 判断是否可以导出：非录音状态 + 已有 PCM 数据
+    function canExportMeeting() {
+      const recording = !$('btnRecStart').classList.contains('hidden') === false; // 录音中
+      // 更直观：根据状态条判断
+      const statusEl = $('recStatus');
+      const isStopped = statusEl && statusEl.classList.contains('stopped');
+      return !!(recTrack && recTrack.hasData && isStopped);
+    }
+
+    function updateExportButtonState() {
+      const btn = $('btnExportMd');
+      if (!btn) return;
+      const ok = canExportMeeting();
+      btn.disabled = !ok;
+      if (ok) {
+        btn.title = '导出会议资料（ZIP：原始音频 + 转录 + 最终纪要）';
+        btn.classList.remove('disabled');
+      } else {
+        const hasData = !!(recTrack && recTrack.hasData);
+        btn.title = hasData
+          ? '会议进行中，结束录音后即可导出'
+          : '尚未开始录音，暂无可导出内容';
+        btn.classList.add('disabled');
+      }
+    }
+
+    // 生成默认会议标题（用当前日期）
+    function defaultMeetingTitle() {
+      const n = new Date();
+      return '会议记录_' + n.getFullYear() + pad2(n.getMonth() + 1) + pad2(n.getDate())
+             + '_' + pad2(n.getHours()) + pad2(n.getMinutes());
+    }
+
+    async function exportMeetingZip() {
+      if (!canExportMeeting()) {
+        toast((recTrack && recTrack.hasData) ? '请先结束录音再导出' : '当前没有可导出的会议资料');
+        return;
+      }
+      const wavBlob = recTrack.buildWavBlob();
+      if (!wavBlob) { toast('未检测到录音数据'); return; }
+
+      const title = defaultMeetingTitle();
+      const form = new FormData();
+      form.append('audio', wavBlob, 'audio.wav');
+      form.append('transcript_json', JSON.stringify(state.transcriptLines || []));
+      form.append('summary_json', JSON.stringify(state.summaryData || null));
+      form.append('title', title);
+      form.append('session_id', state.liveSessionId || 'default');
+
+      const btn = $('btnExportMd');
+      const prevTitle = btn.title;
+      btn.disabled = true;
+      btn.title = '正在打包…';
+      toast('正在打包会议资料…');
+      try {
+        const resp = await fetch('/api/meeting/export', { method: 'POST', body: form });
+        if (!resp.ok) {
+          const msg = await resp.text().catch(() => '');
+          throw new Error('HTTP ' + resp.status + (msg ? ' ' + msg.slice(0, 120) : ''));
+        }
+        const blob = await resp.blob();
+        // 从响应头取文件名；取不到就退回默认
+        let fname = title + '.zip';
+        const dispo = resp.headers.get('Content-Disposition') || '';
+        const m = /filename\*=UTF-8''([^;]+)|filename="([^"]+)"/i.exec(dispo);
+        if (m) fname = decodeURIComponent(m[1] || m[2] || fname);
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = fname; a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        toast('已导出：' + fname);
+      } catch (err) {
+        toast('导出失败：' + (err && err.message ? err.message : err));
+      } finally {
+        btn.title = prevTitle;
+        updateExportButtonState();
+      }
+    }
+
+    // 挂钩录音状态：setRecUi 被调用后同步按钮状态
+    const _origSetRecUi = setRecUi;
+    setRecUi = function(kind) {
+      _origSetRecUi(kind);
+      updateExportButtonState();
+    };
+
+    $('btnExportMd').onclick = () => { exportMeetingZip(); };
+    // 初次渲染先同步一次（未录音 → disabled）
+    updateExportButtonState();
+
+    // ═══════════════════════════════════════════════════
+    // 17) 引导
+    // ═══════════════════════════════════════════════════
+    function bootstrap() {
+      updateHeaderDate();
+      setInterval(updateHeaderDate, 30_000);
+      setRecUi('stopped');
+      setSaveStatus('idle');
+      setFabState('idle');
+      initTabs();
+      initAudioPlayer();
+      initChat();
+      switchTab('transcript');
+      renderTranscript();
+      renderSummary();
+      renderTimelineList();
+      renderSpeakersStats();
+      renderChapters();
+      renderChatHistory();
+      startSummaryTicker();
+      refreshHealth();
+      refreshSpeakers();
+      connectWs();
+      initCursorGlow();
+    }
+
+    // 跟随鼠标的柔光光晕，点缀氛围
+    function initCursorGlow() {
+      const glow = $('cursorGlow');
+      if (!glow) return;
+      let raf = 0, nextX = 0, nextY = 0;
+      window.addEventListener('pointermove', (ev) => {
+        nextX = ev.clientX; nextY = ev.clientY;
+        if (raf) return;
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          glow.style.left = nextX + 'px';
+          glow.style.top  = nextY + 'px';
+        });
+      }, { passive: true });
+    }
+    bootstrap();
+  </script>
+</body>
+</html>
