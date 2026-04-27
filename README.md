@@ -2,7 +2,7 @@
 
 **会议语音助手**（录音 → 转写 / 说话人 / 纪要 / 唤醒问答）。**先跑起来只读 [docs/LOCAL_QUICKSTART.md](docs/LOCAL_QUICKSTART.md)**。仓库不自带云密钥。细节见 [TECHNICAL_OVERVIEW.md](TECHNICAL_OVERVIEW.md)。
 
-**在线试用（Demo）**：[https://8.130.124.121:8765/](https://8.130.124.121:8765/)（HTTPS 自签证书时请在浏览器里选择「继续访问」；该地址为示例部署，不保证长期可用。）
+**在线试用**：[EchoPass Demo](https://8.130.124.121:8765/)（HTTPS 自签证书时请在浏览器里选择「继续访问」；该地址为示例部署，不保证长期可用。）
 
 ![EchoPass 界面预览](docs/assets/echopass-ui-screenshot.png)
 
