@@ -31,8 +31,6 @@ python3.8 -m venv .venv && source .venv/bin/activate
 ./scripts/first-run.sh
 ```
 
-（旧名 `./scripts/first-run-mac.sh` 与上面等价。）
-
 ### 3. 填写 `config/prod.yaml`（必配密钥）
 
 若上一步已生成 `config/prod.yaml`，用编辑器打开并**至少**填好下表（与 [config/prod.yaml.example](../config/prod.yaml.example) 中 `☆` 一致）：
@@ -57,23 +55,13 @@ python3.8 -m venv .venv && source .venv/bin/activate
 FORCE_ONLINE=1 ./scripts/run.sh
 ```
 
-或（等价）：
-
-```bash
-FORCE_ONLINE=1 ./scripts/start.sh
-```
-
 缓存齐了之后，**日常**直接：
 
 ```bash
 ./scripts/run.sh
-# 或
-./scripts/start.sh
 ```
 
-浏览器打开 **https://127.0.0.1:8765**（默认端口 **8765**；自签证书选「继续访问」）。若未装 `openssl`，脚本可能以 **HTTP** 启动，以终端提示为准。
-
-**说明**：`run.sh` 与 `start.sh` 功能相同，`start.sh` 便于记忆「启动」；均在仓库根、已激活环境下执行。
+浏览器打开 **https://127.0.0.1:8765**（默认端口 **8765**；自签证书选「继续访问」）。若未装 `openssl`，脚本可能以 **HTTP** 启动，以终端提示为准。均在仓库根、已激活环境下执行。
 
 ---
 
