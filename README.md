@@ -4,6 +4,8 @@
 
 **在线试用**：[EchoPass Demo](https://8.130.124.121:8765/)（HTTPS 自签证书时请在浏览器里选择「继续访问」；该地址为示例部署，不保证长期可用。）
 
+若你作为开发者觉得有帮助，欢迎在仓库右上角点一颗 **Star**，便于更多人发现本项目。
+
 ![EchoPass 界面预览](docs/assets/echopass-ui-screenshot.png)
 
 ## 能做什么
