@@ -7,7 +7,7 @@ import ssl
 import threading
 import urllib.parse
 import urllib.request
-from typing import AsyncIterator, Iterator, List, Optional
+from typing import Any, AsyncIterator, Dict, Iterator, List, Optional
 
 
 class LLMChatClient:
@@ -18,15 +18,34 @@ class LLMChatClient:
         self._key = api_key
         self._model = model
 
-    async def reply(self, text: str, system_prompt: str = "你是会议语音助手。", max_tokens: int = 512) -> str:
+    @staticmethod
+    def _validate_messages_openai(
+        messages: List[Dict[str, Any]],
+    ) -> List[Dict[str, str]]:
+        out: List[Dict[str, str]] = []
+        for m in messages:
+            r = str(m.get("role") or "").strip()
+            c = str(m.get("content") or "")
+            if r not in ("system", "user", "assistant") or not c:
+                continue
+            out.append({"role": r, "content": c})
+        if not out:
+            raise ValueError("messages 不能为空")
+        return out
+
+    async def chat_complete(
+        self,
+        messages: List[Dict[str, Any]],
+        max_tokens: int = 512,
+        temperature: float = 0.3,
+    ) -> str:
+        """OpenAI Chat 多轮。messages 须含 system 与若干 user/assistant（按时间顺序）。"""
+        clean = self._validate_messages_openai(messages)
         payload = json.dumps(
             {
                 "model": self._model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": text},
-                ],
-                "temperature": 0.3,
+                "messages": clean,
+                "temperature": temperature,
                 "max_tokens": max_tokens,
             }
         ).encode("utf-8")
@@ -43,7 +62,7 @@ class LLMChatClient:
         loop = asyncio.get_event_loop()
 
         def _call():
-            with urllib.request.urlopen(req, timeout=20) as resp:
+            with urllib.request.urlopen(req, timeout=120) as resp:
                 return json.loads(resp.read().decode("utf-8"))
 
         data = await loop.run_in_executor(None, _call)
@@ -54,6 +73,16 @@ class LLMChatClient:
             .strip()
         )
 
+    async def reply(self, text: str, system_prompt: str = "你是会议语音助手。", max_tokens: int = 512) -> str:
+        return await self.chat_complete(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": text},
+            ],
+            max_tokens=max_tokens,
+            temperature=0.3,
+        )
+
     def _iter_chat_deltas_sync(
         self,
         user_text: str,
@@ -61,13 +90,27 @@ class LLMChatClient:
         max_tokens: int = 512,
         temperature: float = 0.3,
     ) -> Iterator[str]:
-        """同步生成器：OpenAI 兼容 SSE（data: {...}\\n\\n），逐段产出 delta.content。"""
-        body = {
-            "model": self._model,
-            "messages": [
+        """单轮 user+system，兼容旧接口。内部走多轮 messages。"""
+        yield from self._iter_chat_deltas_sync_messages(
+            [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_text},
             ],
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+
+    def _iter_chat_deltas_sync_messages(
+        self,
+        messages: List[Dict[str, Any]],
+        max_tokens: int = 512,
+        temperature: float = 0.3,
+    ) -> Iterator[str]:
+        """同步生成器：OpenAI 兼容 SSE，多轮 messages。"""
+        clean = self._validate_messages_openai(messages)
+        body = {
+            "model": self._model,
+            "messages": clean,
             "temperature": temperature,
             "max_tokens": max_tokens,
             "stream": True,
@@ -132,22 +175,22 @@ class LLMChatClient:
         finally:
             conn.close()
 
-    async def stream_reply(
+    async def stream_chat(
         self,
-        user_text: str,
-        system_prompt: str = "你是会议语音助手。",
+        messages: List[Dict[str, Any]],
         max_tokens: int = 512,
         temperature: float = 0.3,
     ) -> AsyncIterator[str]:
-        """异步流式输出 LLM delta 文本（线程桥接 http.client 阻塞读）。"""
+        """多轮 messages 流式输出（与 chat_complete 使用同一套 messages 约定）。"""
+        self._validate_messages_openai(messages)
         loop = asyncio.get_event_loop()
         q: asyncio.Queue = asyncio.Queue(maxsize=256)
         err_box: List[Optional[BaseException]] = [None]
 
         def producer() -> None:
             try:
-                for piece in self._iter_chat_deltas_sync(
-                    user_text, system_prompt, max_tokens, temperature,
+                for piece in self._iter_chat_deltas_sync_messages(
+                    messages, max_tokens, temperature,
                 ):
                     fut = asyncio.run_coroutine_threadsafe(q.put(("d", piece)), loop)
                     fut.result(timeout=120)
@@ -172,3 +215,21 @@ class LLMChatClient:
             t.join(timeout=0.2)
         if err_box[0] is not None:
             raise err_box[0]
+
+    async def stream_reply(
+        self,
+        user_text: str,
+        system_prompt: str = "你是会议语音助手。",
+        max_tokens: int = 512,
+        temperature: float = 0.3,
+    ) -> AsyncIterator[str]:
+        """单轮流式，兼容旧接口。"""
+        async for piece in self.stream_chat(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_text},
+            ],
+            max_tokens=max_tokens,
+            temperature=temperature,
+        ):
+            yield piece

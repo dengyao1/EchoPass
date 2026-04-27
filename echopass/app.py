@@ -127,6 +127,7 @@ try:
 except Exception:  # noqa: BLE001
     pass
 
+import threading
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -251,6 +252,47 @@ def _tts_backend_ready() -> bool:
 ws_hub = WebSocketHub()
 transcript_buffer = TranscriptBuffer()
 _assistant_ttl_sec = cfg("assistant.ttl_sec", "SPEAKER_ASSISTANT_TTL_SEC", 25, int)
+# 会中助手多轮对话：仅保留最近 N 轮 user+assistant（按 session_id 分桶，进程内内存，重启即失）
+_assistant_chat_turns = max(0, cfg("assistant.chat_history_turns", "SPEAKER_ASSISTANT_CHAT_TURNS", 8, int))
+_assistant_chat_lock = threading.Lock()
+_assistant_chat_history: Dict[str, List[Dict[str, str]]] = {}
+
+
+def _assistant_history_get(session_id: str) -> List[Dict[str, str]]:
+    with _assistant_chat_lock:
+        h = _assistant_chat_history.get(session_id)
+        return list(h) if h else []
+
+
+def _assistant_history_append(session_id: str, user_content: str, assistant_content: str) -> None:
+    if _assistant_chat_turns <= 0:
+        return
+    if not session_id or not user_content or not (assistant_content or "").strip():
+        return
+    with _assistant_chat_lock:
+        h = _assistant_chat_history.setdefault(session_id, [])
+        h.append({"role": "user", "content": user_content})
+        h.append({"role": "assistant", "content": (assistant_content or "").strip()})
+        max_pair_msgs = _assistant_chat_turns * 2
+        if len(h) > max_pair_msgs:
+            _assistant_chat_history[session_id] = h[-max_pair_msgs:]
+
+
+def _assistant_history_clear_session_ids(*session_ids: str) -> None:
+    with _assistant_chat_lock:
+        for sid in session_ids:
+            if sid:
+                _assistant_chat_history.pop(sid, None)
+
+
+def _assistant_messages_for_llm(
+    session_id: str, system_prompt: str, current_user_prompt: str,
+) -> List[Dict[str, str]]:
+    return (
+        [{"role": "system", "content": system_prompt}]
+        + _assistant_history_get(session_id)
+        + [{"role": "user", "content": current_user_prompt}]
+    )
 
 
 def _safe_wake_ack_audio_path(raw: str) -> str:
@@ -682,6 +724,8 @@ def asr_reset(session_id: str = "default"):
     asr_engine.reset_session(session_id)
     transcript_buffer.clear(session_id)
     dialogue_manager.stop(session_id)
+    # 同一会话 id 的会中助手多轮记忆一并清空（与前端 chat_ 前缀 id 均尝试）
+    _assistant_history_clear_session_ids(session_id, f"chat_{session_id}")
     return {"ok": True}
 
 
@@ -893,7 +937,9 @@ async def assistant_reply(req: AssistantReplyRequest):
     speaker_tag = (req.speaker or "").strip()
     user_msg = f"【{speaker_tag}】{text}" if speaker_tag else text
     prompt = f"用户说：{user_msg}\n请给出简洁、可口播的中文回复。"
-    llm_text = await llm_chat.reply(prompt, system_prompt=system_prompt, max_tokens=256)
+    messages = _assistant_messages_for_llm(req.session_id, system_prompt, prompt)
+    llm_text = await llm_chat.chat_complete(messages, max_tokens=256, temperature=0.3)
+    _assistant_history_append(req.session_id, prompt, llm_text)
     logger.info(
         "Assistant [%s] ctx_chars=%d use_tts=%s user=%s reply=%s",
         req.session_id, len(meeting_ctx), bool(req.use_tts), text, (llm_text or "").strip(),
@@ -940,6 +986,7 @@ async def assistant_stream(req: AssistantReplyRequest):
     speaker_tag = (req.speaker or "").strip()
     user_msg = f"【{speaker_tag}】{text}" if speaker_tag else text
     prompt = f"用户说：{user_msg}\n请给出简洁、可口播的中文回复。"
+    llm_messages = _assistant_messages_for_llm(req.session_id, system_prompt, prompt)
 
     stream_volc_tts = (
         bool(req.use_tts)
@@ -964,8 +1011,8 @@ async def assistant_stream(req: AssistantReplyRequest):
                 return
 
             if not stream_volc_tts:
-                async for delta in llm_chat.stream_reply(
-                    prompt, system_prompt=system_prompt, max_tokens=256, temperature=0.25,
+                async for delta in llm_chat.stream_chat(
+                    llm_messages, max_tokens=256, temperature=0.25,
                 ):
                     full_parts.append(delta)
                     yield (
@@ -974,6 +1021,7 @@ async def assistant_stream(req: AssistantReplyRequest):
                         + "\n\n"
                     )
                 full = "".join(full_parts)
+                _assistant_history_append(req.session_id, prompt, full)
                 logger.info(
                     "Assistant stream [%s] ctx_chars=%d stream_tts=0 user=%s reply_len=%d",
                     req.session_id, len(meeting_ctx), text, len(full),
@@ -1010,8 +1058,8 @@ async def assistant_stream(req: AssistantReplyRequest):
             async def llm_worker() -> None:
                 buf = ""
                 try:
-                    async for delta in llm_chat.stream_reply(
-                        prompt, system_prompt=system_prompt, max_tokens=256, temperature=0.25,
+                    async for delta in llm_chat.stream_chat(
+                        llm_messages, max_tokens=256, temperature=0.25,
                     ):
                         await out_q.put({"type": "text", "content": delta})
                         buf += delta
@@ -1083,6 +1131,7 @@ async def assistant_stream(req: AssistantReplyRequest):
                         pass
 
             full = "".join(full_parts)
+            _assistant_history_append(req.session_id, prompt, full)
             logger.info(
                 "Assistant stream [%s] ctx_chars=%d stream_tts=1 user=%s reply_len=%d",
                 req.session_id, len(meeting_ctx), text, len(full),

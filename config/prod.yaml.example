@@ -14,6 +14,8 @@ speaker:
 
 assistant:
   ttl_sec: 25
+  # 会中助手多轮对话：保留最近 N 轮（user+assistant 各算半轮）；0=关闭记忆
+  chat_history_turns: 8
   # 可选：相对 echopass/static/；仓库内可生成 audio/wake_ack_01…wav ~ 03…wav
   wake_ack_audio: ""
   meeting_ctx:
