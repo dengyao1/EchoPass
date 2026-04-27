@@ -12,9 +12,8 @@
     2. yaml 文件中对应路径的字段
     3. 调用方提供的 ``default``
 
-切换文件：
-    cp config/prod.yaml.example config/prod.yaml
-    export ECHOPASS_CONFIG=config/prod.yaml   # 未设置时默认读 ``<repo>/config/prod.yaml.example``
+未设置 ``ECHOPASS_CONFIG`` 时：若存在 ``<repo>/config/prod.yaml`` 则自动使用，否则回退
+到 ``config/prod.yaml.example``。仍可用 ``export ECHOPASS_CONFIG=...`` 显式覆盖。
 """
 
 from __future__ import annotations
@@ -27,6 +26,7 @@ from typing import Any, Callable, Optional, TypeVar
 T = TypeVar("T")
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
+_LOCAL_PROD_PATH = _REPO_ROOT / "config" / "prod.yaml"
 _DEFAULT_PATH = _REPO_ROOT / "config" / "prod.yaml.example"
 
 logger = logging.getLogger("echopass.config")
@@ -35,6 +35,8 @@ logger = logging.getLogger("echopass.config")
 def _resolve_path() -> Path:
     p = os.environ.get("ECHOPASS_CONFIG", "").strip()
     if not p:
+        if _LOCAL_PROD_PATH.is_file():
+            return _LOCAL_PROD_PATH
         return _DEFAULT_PATH
     pp = Path(p)
     if not pp.is_absolute():

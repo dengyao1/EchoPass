@@ -132,7 +132,7 @@ FastAPI (app.py)
 
 职责：
 
-- 读取 **`ECHOPASS_CONFIG` 指向的 YAML**（未设置时读 `config/prod.yaml.example`）与环境变量，创建全局单例
+- 读取 **`ECHOPASS_CONFIG` 指向的 YAML**（未设置时：若存在 `config/prod.yaml` 则读之，否则读 `config/prod.yaml.example`）与环境变量，创建全局单例
 - 初始化 FastAPI、CORS、静态文件挂载
 - 定义全部 REST / WebSocket 接口
 - 负责把引擎能力组合成完整业务流程
@@ -435,7 +435,7 @@ FastAPI (app.py)
 
 ## 9. 配置项
 
-运行时以 **`ECHOPASS_CONFIG` 指向的 YAML**（未设置时默认 `config/prod.yaml.example`）为主；下表为代码中使用的**环境变量名**，多数在 YAML 中有等价键（如 `asr.volc.appid`）。合并规则：**环境变量覆盖 YAML**。
+运行时以 **`ECHOPASS_CONFIG` 指向的 YAML**（未设置时：有 `config/prod.yaml` 则用之，否则 `config/prod.yaml.example`）为主；下表为代码中使用的**环境变量名**，多数在 YAML 中有等价键（如 `asr.volc.appid`）。合并规则：**环境变量覆盖 YAML**。
 
 ### 9.1 声纹识别
 

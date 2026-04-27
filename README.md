@@ -68,7 +68,7 @@ flowchart LR
 
 ## 运行环境
 
-运行时需要 Python **3.8**（与锁定依赖一致）。默认**不**需要数据库。**macOS**：`conda create -n echopass python=3.8` → `conda activate echopass` → `./scripts/first-run-mac.sh` → 配置 `config/prod.yaml` → `export ECHOPASS_CONFIG=config/prod.yaml` → `./scripts/run.sh`。**Windows**：`conda create` / `activate` 同上 → `.\scripts\first-run-windows.ps1` → 配置 `config\prod.yaml` → `$env:ECHOPASS_CONFIG="config/prod.yaml"` → `.\scripts\run.ps1`（与 `run.sh` 一样只启动服务）。详见 [docs/LOCAL_QUICKSTART.md](docs/LOCAL_QUICKSTART.md)。**Linux** 可用 venv + `scripts/run.sh`。
+运行时需要 Python **3.8**（与锁定依赖一致）。默认**不**需要数据库。**macOS**：`conda create -n echopass python=3.8` → `conda activate echopass` → `./scripts/first-run-mac.sh` → 配置 `config/prod.yaml` → `./scripts/run.sh`（已存在 `config/prod.yaml` 时会自动使用；亦可用 `export ECHOPASS_CONFIG=...` 指定路径）。**Windows**：`conda create` / `activate` 同上 → `.\scripts\first-run-windows.ps1` → 配置 `config\prod.yaml` → `.\scripts\run.ps1`（与 `run.sh` 一样；有 `config\prod.yaml` 时自动使用，亦可 `$env:ECHOPASS_CONFIG="config\prod.yaml"` 显式指定）。详见 [docs/LOCAL_QUICKSTART.md](docs/LOCAL_QUICKSTART.md)。**Linux** 可用 venv + `scripts/run.sh`。
 
 ## 快速开始
 
@@ -76,7 +76,7 @@ flowchart LR
 
 - 若 `modelscope` / `funasr` 版本冲突：`pip install --force-reinstall --no-deps modelscope==1.10.0 funasr==1.3.1`
 - **首次**从 ModelScope 等拉取 **CAM++** 权重要联网。若还启用了 `kws.enabled: true`，会额外拉取 **KWS** 权重；未启用 KWS 时不会下载唤醒词模型。在已 `export ECHOPASS_CONFIG=config/prod.yaml` 的前提下执行 `FORCE_ONLINE=1 ./scripts/run.sh`（Windows：`$env:FORCE_ONLINE=1; .\scripts\run.ps1`）。日常启动见各平台小节。
-- 配置优先级：`环境变量` > `ECHOPASS_CONFIG` 指向的 yaml > 仓库模板。未设置 `ECHOPASS_CONFIG` 时默认读取 **`config/prod.yaml.example`**。必配：**火山 `asr.volc.appid` + `token`**、**`llm.api_url` + `api_key` + `model`**；`asr.volc.api=common` 时还要 `cluster`。可选：TTS、`speaker.pg_dsn`（声纹落库）等，见 [config/prod.yaml.example](config/prod.yaml.example)。本地可复制为 `config/prod.yaml` 再 `export ECHOPASS_CONFIG=config/prod.yaml`。
+- 配置优先级：`环境变量` > `ECHOPASS_CONFIG` 指向的 yaml > 自动 `config/prod.yaml`（若存在）> **`config/prod.yaml.example`**。必配：**火山 `asr.volc.appid` + `token`**、**`llm.api_url` + `api_key` + `model`**；`asr.volc.api=common` 时还要 `cluster`。可选：TTS、`speaker.pg_dsn`（声纹落库）等，见 [config/prod.yaml.example](config/prod.yaml.example)。本地复制为 `config/prod.yaml` 后一般**无需**再 `export ECHOPASS_CONFIG`；仍可用其指向其他路径。
 - 声纹默认在**内存**；要跨重启保留再配 PostgreSQL（`sql/schema.sql` + `pg_dsn`）。
 - **Windows** 与 **macOS** 一致：先用 **`first-run-windows.ps1` / `first-run-mac.sh`** 在已 `conda activate` 的 Python 3.8 环境里装依赖；日常只用 **`run.ps1` / `run.sh`** 启动。可选：`environment.yml` 仅供你手动 `conda env create -f` 时参考（非必选）。
 
@@ -354,7 +354,7 @@ $env:FORCE_ONLINE=1
 ## 安全与公开仓库
 
 - **曾出现在旧提交或外泄副本中的任何真实密钥、DSN 均视为已泄露**，在改为公开或 Fork 前，应在火山、LLM 提供商、数据库等处**轮换或作废**。
-- 本仓库的 `config/prod.yaml` 等本地私用路径已列入 [`.gitignore`](.gitignore)；仅提交去敏模板 `config/prod.yaml.example`（运行时复制为 `prod.yaml` 并 `export ECHOPASS_CONFIG=config/prod.yaml`，不设则默认读该模板）。
+- 本仓库的 `config/prod.yaml` 等本地私用路径已列入 [`.gitignore`](.gitignore)；仅提交去敏模板 `config/prod.yaml.example`（本地复制为 `config/prod.yaml` 后，未设置 `ECHOPASS_CONFIG` 时会自动优先读该文件）。
 - 若需对外公开**历史提交中也不含**密钥，需另用 [git filter-repo](https://github.com/newren/git-filter-repo) 等工具清洗历史，或新建无历史敏感提交的分支/仓库；本计划只保证**当前工作树**无硬编码秘钥与内网地址。
 
 ## 许可证与致谢

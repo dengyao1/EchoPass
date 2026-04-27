@@ -94,6 +94,7 @@ cd /path/to/ECHOPASS   # 换成你的克隆目录
 ```bash
 conda activate echopass
 cd /path/to/ECHOPASS
+# 若已存在 config/prod.yaml，可省略下一行；程序会自动优先读它
 export ECHOPASS_CONFIG=config/prod.yaml
 ```
 
@@ -127,7 +128,7 @@ pip install -r requirements.txt
 
 test -f config/prod.yaml || cp config/prod.yaml.example config/prod.yaml
 # 用编辑器打开 prod.yaml，填 llm 与 asr.volc
-export ECHOPASS_CONFIG=config/prod.yaml
+# 存在 config/prod.yaml 时可省略：export ECHOPASS_CONFIG=config/prod.yaml
 
 # 首次拉模型需联网：
 FORCE_ONLINE=1 ./scripts/run.sh
