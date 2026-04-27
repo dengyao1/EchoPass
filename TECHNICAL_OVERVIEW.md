@@ -73,8 +73,10 @@ EchoPass/
 ├── requirements.txt              # 运行依赖
 ├── pyproject.toml                # 包元信息（可选，便于 pip install -e .）
 ├── scripts/
-│   ├── first-run-mac.sh          # macOS：在 conda activate echopass 后首次装依赖
-│   ├── first-run-windows.ps1     # Windows：同上
+│   ├── first-run.sh              # macOS/Linux：首次装依赖并生成 config/prod.yaml
+│   ├── first-run-mac.sh          # 兼容旧名，等同 first-run.sh
+│   ├── start.sh                  # 一键启动（封装 run.sh）
+│   ├── first-run-windows.ps1     # Windows：首次装依赖
 │   ├── first-run-windows.bat
 │   ├── run.ps1                   # Windows 启动（与 run.sh 对齐）
 │   └── run.sh                    # macOS/Linux 启动脚本
@@ -523,7 +525,7 @@ FastAPI (app.py)
 conda create -n echopass python=3.8 -y
 conda activate echopass
 cd /path/to/ECHOPASS
-./scripts/first-run-mac.sh          # 装依赖、可选复制 prod.yaml、固定 modelscope
+./scripts/first-run.sh              # macOS/Linux：装依赖、可选复制 prod.yaml、固定 modelscope
 # 编辑 config/prod.yaml（火山 ASR、LLM 等）
 export ECHOPASS_CONFIG=config/prod.yaml
 FORCE_ONLINE=1 ./scripts/run.sh     # 首次拉 CAM++（及 kws.enabled 时 KWS）等权重需联网

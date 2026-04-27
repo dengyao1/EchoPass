@@ -1,10 +1,9 @@
 # EchoPass · 生产环境配置模板
 # ----------------------------------------------------------------------------
-# 复制为 config/prod.yaml 并替换 ☆ 标记的字段，然后启动：
-#   export ECHOPASS_CONFIG=config/prod.yaml
-#   ./scripts/run.sh
-#
-# 任意字段都可以临时被同名 SPEAKER_* 环境变量覆盖。
+# 推荐：./scripts/first-run.sh（macOS/Linux）会复制本文件为 config/prod.yaml（若不存在）；
+# 再编辑 prod.yaml 填好 ☆ 项，然后 ./scripts/run.sh 或 ./scripts/start.sh
+# 若仓库根已有 config/prod.yaml，可不再设置 ECHOPASS_CONFIG。
+# 任意字段可临时被同名 SPEAKER_* 环境变量覆盖。
 # ----------------------------------------------------------------------------
 
 speaker:

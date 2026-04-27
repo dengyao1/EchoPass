@@ -1,73 +1,14 @@
 # 本地跑起来（最短）
 
-环境变量与 YAML 键的对应关系、各模块职责见仓库根目录 [TECHNICAL_OVERVIEW.md](../TECHNICAL_OVERVIEW.md)（§9 配置、§11 启动）。
-
-**需要**：**Windows / macOS** 均推荐 **Miniconda/Anaconda + Python 3.8**（见下文）；Linux 可用 **Python 3.8** 与 venv。均需能上网（首次下模型）、火山 ASR 的 `appid`+`token`、任意 **OpenAI 兼容 LLM** 的 `url`+`key`+`model`。**不要**装数据库（默认声纹在内存里）。
-
-## Windows（推荐 conda）
-
-本仓库依赖锁定在 **Python 3.8**。请使用 **「Anaconda Prompt」或已初始化 conda 的 PowerShell」**，不要用与项目无关的 Python 3.12+ 直接装依赖。
-
-### 1. 创建并进入 conda 环境
-
-```powershell
-conda create -n echopass python=3.8 -y
-conda activate echopass
-cd C:\path\to\ECHOPASS   # 换成你的克隆目录
-```
-
-### 2. 首次安装依赖
-
-在**已 `conda activate echopass`** 的前提下执行（脚本只用当前环境的 `python`/`pip`，**不创建 conda 环境、不创建 .venv**）：
-
-```powershell
-.\scripts\first-run-windows.ps1
-```
-
-或双击 / 调用 **`scripts\first-run-windows.bat`**（等价调用上面的 ps1）。
-
-该脚本会：升级 `pip`/`setuptools`/`wheel`、`pip install -r requirements.txt`、固定 `modelscope==1.10.0`；若不存在 `config\prod.yaml` 则从 `prod.yaml.example` 复制一份。
-
-### 3. 填写配置
-
-用记事本或编辑器打开 `config\prod.yaml`，至少填写 **LLM** 与 **火山 ASR**（`llm.api_url` / `api_key` / `model`，`asr.volc.appid` / `token` 等）。字段说明见 [config/prod.yaml.example](../config/prod.yaml.example)。
-
-### 4. 启动服务
-
-```powershell
-conda activate echopass
-cd C:\path\to\ECHOPASS
-$env:ECHOPASS_CONFIG = "config/prod.yaml"
-```
-
-**第一次**从 ModelScope 等拉取 **CAM++** 权重需联网。若 `config/prod.yaml` 里设了 `kws.enabled: true`，还会再拉取 **KWS**；默认 `kws.enabled` 为 false 时不会下载唤醒词模型。
-
-```powershell
-$env:FORCE_ONLINE = "1"
-.\scripts\run.ps1
-```
-
-缓存齐了之后，日常可直接：
-
-```powershell
-.\scripts\run.ps1
-```
-
-`run.ps1` 与 macOS 的 `run.sh` 一样，只负责设置离线/SSL 并启动 uvicorn，**不**创建 conda、**不**读 `environment.yml` 装依赖。
-
-浏览器打开 **`https://127.0.0.1:8765`**（端口默认 **8765**；自签证书选「继续访问」）。若 PATH 中没有 `openssl`，脚本会以 **HTTP** 启动，以终端提示为准。
-
-### 5. 可选
-
-- **ffmpeg**：若需更好音频兼容，可自行安装并加入 PATH（见项目 README 常见问题）。
+更全的配置说明、环境变量表见仓库根目录 [TECHNICAL_OVERVIEW.md](../TECHNICAL_OVERVIEW.md)（§9、§11）。
 
 ---
 
-## macOS（推荐 conda）
+## macOS / Linux（统一流程）
 
-本仓库依赖锁定在 **Python 3.8**（与 `requirements.txt` / Docker 一致）。在 Apple 芯片上，**不要用系统自带的 Python 3.12+ 去建 `.venv`**，否则 `numpy` 等会装失败；推荐用 **Miniconda/Anaconda** 单独建环境。
+依赖 **Python 3.8**。推荐 **Miniconda/Anaconda**（macOS、Linux 均可）；也可自建 **venv**，只要 `python` 为 3.8 即可。
 
-### 1. 创建并进入 conda 环境
+### 1. 创建并进入环境（示例：conda）
 
 ```bash
 conda create -n echopass python=3.8 -y
@@ -75,93 +16,125 @@ conda activate echopass
 cd /path/to/ECHOPASS   # 换成你的克隆目录
 ```
 
-### 2. 首次安装依赖
-
-在**已 `conda activate echopass`** 的前提下执行（脚本只使用当前环境的 `python`/`pip`，**不创建 `.venv`**）：
+若用 venv（Linux 常见）：
 
 ```bash
-./scripts/first-run-mac.sh
+cd /path/to/ECHOPASS
+python3.8 -m venv .venv && source .venv/bin/activate
 ```
 
-该脚本会：`pip`/`setuptools`/`wheel` 升级、`pip install -r requirements.txt`、固定 `modelscope==1.10.0`；若不存在 `config/prod.yaml` 则从 `prod.yaml.example` 复制一份。
+### 2. 一键准备环境 + 生成配置模板
 
-### 3. 填写配置
+在**已激活的 3.8 环境**下执行（只装依赖、从模板复制 `config/prod.yaml`，**不启动服务**）：
 
-编辑 `config/prod.yaml`，至少填写 **LLM** 与 **火山 ASR**（`llm.api_url` / `api_key` / `model`，`asr.volc.appid` / `token` 等）。字段说明见仓库根目录 [config/prod.yaml.example](../config/prod.yaml.example)。
+```bash
+./scripts/first-run.sh
+```
+
+（旧名 `./scripts/first-run-mac.sh` 与上面等价。）
+
+### 3. 填写 `config/prod.yaml`（必配密钥）
+
+若上一步已生成 `config/prod.yaml`，用编辑器打开并**至少**填好下表（与 [config/prod.yaml.example](../config/prod.yaml.example) 中 `☆` 一致）：
+
+| 配置路径 | 说明 |
+| --- | --- |
+| `llm.api_url` | OpenAI 兼容 Chat Completions 地址，如 `https://api.xxx/v1/chat/completions` |
+| `llm.api_key` | 该 LLM 的 API Key |
+| `llm.model` | 模型名，如 `qwen-plus`、`deepseek-chat` |
+| `asr.volc.appid` | 火山引擎 openspeech / ASR 项目 AppID |
+| `asr.volc.token` | 火山 ASR Access Token |
+
+**常用可选**：`asr.volc.api`（`bigmodel` / `common`）、`tts.*`（播报）、`speaker.pg_dsn`（声纹落库）、`kws.enabled: true`（本地「小云小云」唤醒，会多下 KWS 模型）。
+
+填完后**保存**；不需要再设 `ECHOPASS_CONFIG`（仓库根存在 `config/prod.yaml` 时会自动使用）。
 
 ### 4. 启动服务
 
-```bash
-conda activate echopass
-cd /path/to/ECHOPASS
-# 若已存在 config/prod.yaml，可省略下一行；程序会自动优先读它
-export ECHOPASS_CONFIG=config/prod.yaml
-```
-
-**第一次**从 ModelScope 等拉取 **CAM++** 权重需要联网。若已设 `kws.enabled: true`，会同时拉取 **KWS**；默认不启用 KWS 时不会下载唤醒词模型。建议：
+**首次**在本机拉取 CAM++ 等模型需能访问外网：
 
 ```bash
 FORCE_ONLINE=1 ./scripts/run.sh
 ```
 
-缓存齐了之后，日常可直接：
+或（等价）：
+
+```bash
+FORCE_ONLINE=1 ./scripts/start.sh
+```
+
+缓存齐了之后，**日常**直接：
 
 ```bash
 ./scripts/run.sh
+# 或
+./scripts/start.sh
 ```
 
-浏览器打开 **`https://127.0.0.1:8765`**（端口默认 **8765**；自签证书在浏览器中选「高级 → 继续访问」）。若本机没有 `openssl`，`run.sh` 可能退成 HTTP，以终端提示为准。
+浏览器打开 **https://127.0.0.1:8765**（默认端口 **8765**；自签证书选「继续访问」）。若未装 `openssl`，脚本可能以 **HTTP** 启动，以终端提示为准。
 
-### 5. 可选
-
-- **ffmpeg**（部分音频路径更省事）：`brew install ffmpeg`
-- 若曾误用错误 Python 建过仓库下的 `.venv`，可直接删除：`rm -rf .venv`（conda 方案不依赖它）
+**说明**：`run.sh` 与 `start.sh` 功能相同，`start.sh` 便于记忆「启动」；均在仓库根、已激活环境下执行。
 
 ---
 
-## Linux
+## Windows（推荐 conda）
 
-```bash
-cd ECHOPASS
-python3.8 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+本仓库依赖 **Python 3.8**。请用 **「Anaconda Prompt」或已初始化的 PowerShell 里的 conda**。
 
-test -f config/prod.yaml || cp config/prod.yaml.example config/prod.yaml
-# 用编辑器打开 prod.yaml，填 llm 与 asr.volc
-# 存在 config/prod.yaml 时可省略：export ECHOPASS_CONFIG=config/prod.yaml
+### 1. 环境
 
-# 首次拉模型需联网：
-FORCE_ONLINE=1 ./scripts/run.sh
-# 之后日常：./scripts/run.sh
+```powershell
+conda create -n echopass python=3.8 -y
+conda activate echopass
+cd C:\path\to\ECHOPASS
 ```
 
-浏览器打开 `https://127.0.0.1:8765`（自签证书点「继续访问」；端口默认 **8765**）。
+### 2. 首次安装
 
-`prod.yaml` 里至少要长这样（把引号里换成真值）：
-
-```yaml
-llm:
-  api_url: "https://你的服务商/v1/chat/completions"
-  api_key: "sk-…"
-  model: "你的模型名"
-asr:
-  volc:
-    api: "bigmodel"
-    appid: "…"
-    token: "…"
+```powershell
+.\scripts\first-run-windows.ps1
 ```
 
-第一次下模型失败就再执行：`FORCE_ONLINE=1 ./scripts/run.sh`。Windows PowerShell 对应写法是：`$env:FORCE_ONLINE=1; .\scripts\run.ps1`。
-日志里「预加载失败: 火山」= ASR 没配对，改完重启。
+会安装依赖、若无 `config\prod.yaml` 则从模板复制。
 
-### 要让声纹进 PostgreSQL 时
+### 3. 配置
 
-默认 `requirements.txt` **不含** `psycopg2-binary`。只有配置了 `speaker.pg_dsn`（或等价环境变量）并要让声纹落库时，再执行：
+用编辑器打开 `config\prod.yaml`，**必配项与上表相同**（`llm.*`、`asr.volc.appid` / `token`）。
 
-```bash
-pip install "psycopg2-binary==2.9.10"
+### 4. 启动
+
+首次拉模型（联网）：
+
+```powershell
+$env:FORCE_ONLINE = "1"
+.\scripts\run.ps1
 ```
 
-在 **macOS Apple 芯片 + Python 3.8** 上该版本常无预编译 wheel，会本地编译并需要 `pg_config`：可用 `conda install -c conda-forge libpq` 或 `brew install libpq` 并把 `.../opt/libpq/bin` 加入 `PATH`，或改用 **Python 3.10+** 环境以使用官方 wheel。
+之后日常：
 
-更全的说明见仓库根目录 [README.md](../README.md)。
+```powershell
+.\scripts\run.ps1
+```
+
+浏览器：**https://127.0.0.1:8765**。若本机无 `openssl`，可能为 HTTP，以终端为准。
+
+---
+
+## 必配项小结（复制 `prod.yaml` 后必改）
+
+1. `llm.api_url`、`llm.api_key`、`llm.model`  
+2. `asr.volc.appid`、`asr.volc.token`  
+
+其余按业务再开：TTS、`kws.enabled`、声纹库等，见 [config/prod.yaml.example](../config/prod.yaml.example)。
+
+---
+
+## 故障与可选
+
+- **首启慢 / 预加载失败「火山」**：多为未填或填错 `asr.volc`，改后重启。  
+- **首启要拉模型**：用 `FORCE_ONLINE=1`；日常可去掉。  
+- **纪要一直空**：查 `llm` 三件套是否可访问。  
+- **ffmpeg**（部分音频更省事）：系统包管理器自行安装。  
+- **声纹用 PostgreSQL**：`requirements.txt` 默认不含驱动；需落库时安装 `psycopg2-binary` 并配 `speaker.pg_dsn`，见模板注释；Apple 硅 + Py3.8 下编译问题见 [README](../README.md) 或 TECHNICAL 文档。
+
+更全的说明见 [README.md](../README.md)、[TECHNICAL_OVERVIEW.md](../TECHNICAL_OVERVIEW.md)。

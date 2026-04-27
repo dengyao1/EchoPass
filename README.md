@@ -32,9 +32,10 @@ flowchart LR
 
 ## 快速开始
 
-1. **Python 3.8**，复制配置：`cp config/prod.yaml.example config/prod.yaml`，填写 **`asr.volc.appid` / `token`**、**`llm.api_*` / `model`**。存在 `config/prod.yaml` 时一般**不必**设 `ECHOPASS_CONFIG`。
-2. 安装与启动以 **[docs/LOCAL_QUICKSTART.md](docs/LOCAL_QUICKSTART.md)** 为准；首次拉 CAM++（及可选 KWS）需联网：`FORCE_ONLINE=1 ./scripts/run.sh`。
-3. 日常：`./scripts/run.sh`（Windows：`.\scripts\run.ps1`），默认 `https://127.0.0.1:8765`。
+1. **Python 3.8** 环境（推荐 conda）→ 在仓库根执行 **`./scripts/first-run.sh`**（装依赖并生成 `config/prod.yaml` 模板，若已有则不覆盖）。
+2. 编辑 **`config/prod.yaml`**，至少填 **LLM**（`llm.api_url` / `api_key` / `model`）与 **火山 ASR**（`asr.volc.appid` / `token`）。存在 `config/prod.yaml` 时一般**不必**设 `ECHOPASS_CONFIG`。
+3. **首次**拉模型需联网：`FORCE_ONLINE=1 ./scripts/run.sh`（与 `./scripts/start.sh` 等价）。**日常**：`./scripts/run.sh`；Windows 用 `.\scripts\run.ps1`。详见 **[docs/LOCAL_QUICKSTART.md](docs/LOCAL_QUICKSTART.md)**。
+4. 浏览器默认 **`https://127.0.0.1:8765`**。
 
 **常用配置**（完整表见 [config/prod.yaml.example](config/prod.yaml.example)）：`speaker.pg_dsn`（声纹落库）、`kws.enabled`、`preload_models`、`tts.*`。
 
