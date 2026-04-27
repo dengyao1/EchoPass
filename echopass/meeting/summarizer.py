@@ -50,6 +50,7 @@ class MeetingSummarizer:
         return {
             "title": title,
             "summary": "",
+            "background": "",
             "modules": [],
             "key_points": [],
             "decisions": [],
@@ -63,33 +64,39 @@ class MeetingSummarizer:
         prompt = (
             "请将以下会议转录整理为【模块化报告式 JSON】，严格按下面 schema 输出，不要任何解释文字。\n\n"
             "顶层字段：\n"
-            "  - title: 字符串，会议主标题（10~20 字，凝练）\n"
-            "  - summary: 一句话副标题/导语（20~40 字），点出会议主旨\n"
+            f"  - title: 字符串，会议主标题（10~20 字，凝练；建议与「{title}」协调）\n"
+            "  - summary: 一句话副标题/导语（20~50 字），点出会议主旨与结论走向\n"
+            "  - background: 字符串，【会议背景】2~5 句中文。应归纳：开会的动因/业务场景、要解决的问题、"
+            "主要参与方或产品范围、若转录中未说明则可合理推断但勿编造具体数字合同名称。\n"
             "  - modules: 数组，每项是一个【编号模块卡片】\n"
-            "  - key_points / decisions / action_items / risks: 旧字段（可派生自 modules，便于兼容）\n\n"
+            "  - key_points / decisions / action_items / risks: 旧字段（可派生自 modules，便于兼容）\n"
+            "    其中 action_items 表示【待办事项】，必须与 modules 里 type=actions 的待办保持一致或为其子集；\n"
+            "    每一项为 {task, owner, due_date}，task 用动词开头、可执行、可跟踪；\n"
+            "    owner/due_date 在转录未提及时可留空串，不要写「待定」「TBD」敷衍。\n\n"
             "module 字段：\n"
             "  - no: 两位数字符串，例如 \"01\"、\"02\"，从 01 递增\n"
-            "  - title: 5~12 字模块名，例如 \"核心议题\"、\"关键讨论点\"、\"决议与结论\"\n"
+            "  - title: 5~12 字模块名，例如 \"会议背景\"、\"核心议题\"、\"待办与负责人\"\n"
             "  - intro: 可选，1 句话模块导语，不超过 40 字\n"
             "  - type: 必须是 bullets / table / actions / callout 之一\n"
             "  - 根据 type 提供以下不同字段：\n"
             "    * bullets: items=[{label:'<5~10字短词>', desc:'<1-2句详细说明>'}]\n"
-            "    * table:   columns=['维度','选项A','选项B',...], rows=[['底座能力','支持多家','只支持一家'],...]\n"
-            "    * actions: items=[{task:'<具体任务>', owner:'<负责人，可空>', due:'<截止时间，可空>'}]\n"
-            "    * callout: items=['<结论1>','<结论2>']  // 用于结论/共识/风险等强调列表\n\n"
-            "建议的模块组织方式（可灵活增减，3~7 个为宜，不要凑数）：\n"
+            "    * table:   columns=[...], rows=[[...],...]\n"
+            "    * actions: items=[{task:'<可执行待办，动词开头>', owner:'<负责人，可空>', due:'<截止，可空>'}]\n"
+            "    * callout: items=['<结论/共识/风险>']\n\n"
+            "【建议】模块组织（3~8 个为宜，可增减；无内容则省略该模块）：\n"
+            "  - 若 background 已写全，可不再单独用模块重复「会议背景」；需要时可用 bullets 写「背景要点」。\n"
             "  01 核心议题（bullets）\n"
-            "  02 关键讨论点（bullets 或 table，按场景）\n"
-            "  03 决议与结论（callout）\n"
-            "  04 行动项 / 待办（actions）\n"
+            "  02 关键讨论与分歧（bullets 或 table）\n"
+            "  03 决议与共识（callout）\n"
+            "  04 待办事项（actions）— 全量、具体，优先从发言中显式或隐含的「谁做什么、何时前」提取\n"
             "  05 风险与未决（callout）\n"
-            "  06 下一步计划（bullets）\n\n"
+            "  06 后续计划（bullets）\n\n"
             "格式硬要求：\n"
-            "  - 必须是合法 JSON，不要 markdown 包裹。\n"
-            "  - 所有字符串使用中文，不要出现 \"TODO\" \"待补充\" 这类无意义占位。\n"
-            "  - 没有内容的模块直接省略，不要返回空 items。\n"
-            "  - key_points/decisions/action_items/risks 这四个旧字段必须返回，可以从 modules 里抽取要点；\n"
-            "    若没有对应内容则返回空数组。\n\n"
+            "  - 必须是合法 JSON，不要 markdown 代码块包裹。\n"
+            "  - 所有字符串使用中文，不要出现 \"TODO\"、\"待补充\" 这类无信息占位。\n"
+            "  - 没有内容的模块直接省略，不要返回空 items；background 在完全无信息时可为空串 "
+            "（尽量根据转写作合理归纳）。\n"
+            "  - key_points/decisions/action_items/risks 四字段必须返回；若与 modules 重复，以结构化 modules 为准抽取。\n\n"
             f"会议标题建议：{title}\n"
             "转录如下：\n"
             + "\n".join(lines)
@@ -97,7 +104,10 @@ class MeetingSummarizer:
         try:
             text = await self._llm.reply(
                 prompt,
-                system_prompt="你是专业会议纪要助手，擅长把会议讨论整理成结构化、模块化的报告。只输出 JSON。",
+                system_prompt=(
+                    "你是专业会议纪要助手，负责归纳会议背景、讨论要点、决议与可执行待办；"
+                    "待办要具体、可跟踪。只输出一个 JSON 对象，不要其他文字。"
+                ),
             )
         except Exception:
             return None
@@ -132,6 +142,7 @@ class MeetingSummarizer:
         out: Dict[str, Any] = {
             "title": str(parsed.get("title") or title).strip() or title,
             "summary": str(parsed.get("summary") or "").strip(),
+            "background": str(parsed.get("background") or parsed.get("meeting_background") or "").strip(),
             "modules": self._normalize_modules(parsed.get("modules")),
             "key_points": [str(x) for x in (parsed.get("key_points") or []) if x],
             "decisions": [str(x) for x in (parsed.get("decisions") or []) if x],
@@ -294,6 +305,11 @@ class MeetingSummarizer:
         return {
             "title": title,
             "summary": summary,
+            "background": (
+                (joined[:200] + "…")
+                if len(joined) > 200
+                else (joined or "（未配置 LLM，无深度归纳的会议背景）")
+            ),
             "modules": modules,
             "key_points": key_points,
             "decisions": [],

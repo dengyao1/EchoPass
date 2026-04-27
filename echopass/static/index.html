@@ -445,6 +445,19 @@
     .report-hero .h-sub {
       font-size: 0.8rem; color: var(--text-sub); line-height: 1.6;
     }
+    .report-background {
+      margin-bottom: 0.85rem;
+      padding: 0.75rem 1rem;
+      border-radius: 12px;
+      border: 1px solid rgba(100, 200, 255, 0.22);
+      background: linear-gradient(135deg, rgba(100, 200, 255, 0.08), rgba(0, 0, 0, 0.02));
+    }
+    .report-background .bg-label {
+      font-size: 0.68rem; font-weight: 700; color: var(--cyan); letter-spacing: 0.08em; margin-bottom: 0.35rem;
+    }
+    .report-background .bg-text {
+      font-size: 0.8rem; color: var(--text); line-height: 1.65; white-space: pre-wrap;
+    }
     .report-module {
       margin-bottom: 0.85rem;
       border-radius: 14px;
@@ -2063,6 +2076,10 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       const s = state.summaryData;
       if (!s) md += '_（未生成）_\n\n';
       else {
+        if (s.background && String(s.background).trim()) {
+          md += '### 会议背景\n\n' + String(s.background).trim() + '\n\n';
+        }
+        if (s.title && String(s.title).trim()) md += '**标题**（纪要）：' + String(s.title).trim() + '\n\n';
         if (s.summary) md += '### 摘要\n\n' + s.summary + '\n\n';
         if (s.key_points && s.key_points.length) {
           md += '### 要点\n\n';
@@ -2079,7 +2096,8 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
           for (const x of s.action_items) {
             const t = (x && x.task) || String(x);
             const owner = x && x.owner ? '（负责人：' + x.owner + '）' : '';
-            const due = x && x.due_date ? '  截止：' + x.due_date : '';
+            const d = (x && (x.due_date || x.due)) || '';
+            const due = d ? '  截止：' + d : '';
             md += '- ' + t + owner + due + '\n';
           }
           md += '\n';
@@ -2509,6 +2527,16 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
         );
       }
 
+      const bg = (s.background || '').trim();
+      if (bg) {
+        parts.push(
+          '<div class="report-background" role="region" aria-label="会议背景">' +
+            '<div class="bg-label">会议背景</div>' +
+            '<div class="bg-text">' + escHtml(bg) + '</div>' +
+          '</div>'
+        );
+      }
+
       // ─ 模块化报告：优先用 LLM 返回的 modules
       const modules = Array.isArray(s.modules) ? s.modules : [];
       if (modules.length) {
@@ -2570,6 +2598,15 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
     // 没有 modules 时的兜底渲染（向后兼容旧的 summary 数据格式）
     function renderLegacySections(s) {
       const out = [];
+      const lbg = (s.background || '').trim();
+      if (lbg) {
+        out.push(
+          '<div class="report-background" role="region" aria-label="会议背景">' +
+            '<div class="bg-label">会议背景</div>' +
+            '<div class="bg-text">' + escHtml(lbg) + '</div>' +
+          '</div>'
+        );
+      }
       if (s.key_points && s.key_points.length) {
         out.push(
           '<div class="summary-section"><h3>要点</h3><ul>' +
@@ -2590,7 +2627,8 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
             s.action_items.map((x) => {
               const task = escHtml((x && x.task) || String(x));
               const owner = x && x.owner ? '<span class="owner">负责人：' + escHtml(x.owner) + '</span>' : '<span class="owner"></span>';
-              const due = x && x.due_date ? '<span class="due">截止：' + escHtml(x.due_date) + '</span>' : '<span class="due"></span>';
+              const d = x && (x.due_date || x.due) ? String(x.due_date || x.due) : '';
+              const due = d ? '<span class="due">截止：' + escHtml(d) + '</span>' : '<span class="due"></span>';
               return '<div class="action-item"><span>' + task + '</span>' + owner + due + '</div>';
             }).join('') +
           '</div>'
