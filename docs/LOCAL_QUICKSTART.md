@@ -40,7 +40,7 @@ cd C:\path\to\ECHOPASS
 $env:ECHOPASS_CONFIG = "config/prod.yaml"
 ```
 
-**第一次**从 ModelScope 等拉取 CAM++/KWS 权重需联网：
+**第一次**从 ModelScope 等拉取 **CAM++** 权重需联网。若 `config/prod.yaml` 里设了 `kws.enabled: true`，还会再拉取 **KWS**；默认 `kws.enabled` 为 false 时不会下载唤醒词模型。
 
 ```powershell
 $env:FORCE_ONLINE = "1"
@@ -97,7 +97,7 @@ cd /path/to/ECHOPASS
 export ECHOPASS_CONFIG=config/prod.yaml
 ```
 
-**第一次**从 ModelScope 等拉取 CAM++/KWS 权重需要联网，建议：
+**第一次**从 ModelScope 等拉取 **CAM++** 权重需要联网。若已设 `kws.enabled: true`，会同时拉取 **KWS**；默认不启用 KWS 时不会下载唤醒词模型。建议：
 
 ```bash
 FORCE_ONLINE=1 ./scripts/run.sh

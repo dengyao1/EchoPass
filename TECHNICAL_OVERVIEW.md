@@ -8,7 +8,7 @@
 - 实时语音转写（火山引擎云端流式 ASR / openspeech v2 WebSocket，支持热词偏置）
 - 可选的 ASR 文本 LLM 纠错
 - 会议纪要自动生成（LLM 结构化输出 + 规则兜底）
-- 唤醒词触发的语音助手（FunASR CTC-KWS）
+- 唤醒词触发的语音助手（FunASR CTC-KWS，默认不启用，见 `kws.enabled`）
 - 可选的 TTS 语音播报（火山双向流式 / OpenAI 兼容 HTTP）
 
 后端核心代码位于 `echopass/`，前端单页位于 `echopass/static/`，脚本 `scripts/`，SQL 在 `sql/`。**想先跑起来**请直接看 [docs/LOCAL_QUICKSTART.md](docs/LOCAL_QUICKSTART.md)。
@@ -43,7 +43,8 @@
 
 ### 2.4 唤醒词助手
 
-- 前端常驻监听“小云小云”
+- 需 `kws.enabled: true`（或 `SPEAKER_KWS_ENABLED=1`）才加载本地 KWS；默认不加载、不下载唤醒词模型
+- 启用后，前端可常驻监听「小云小云」
 - 后端 KWS 引擎进行关键词检测
 - 唤醒后录制一段语音并转写
 - 调用 LLM 返回简洁口语化回复
@@ -186,7 +187,7 @@ FastAPI (app.py)
 
 #### `KWSEngine`
 
-- 封装 FunASR 关键词唤醒模型
+- 封装 FunASR 关键词唤醒模型；`KWSEngine.enabled` 与配置 `kws.enabled` 一致，为 false 时不下载、不加载权重（默认）
 - 输入 16k PCM
 - 输出 `(triggered, score, raw_result)`
 - 内部适配多种 FunASR 返回格式
@@ -473,7 +474,8 @@ FastAPI (app.py)
 
 | 环境变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `SPEAKER_KWS_KEYWORDS` | `小云小云` | 唤醒词 |
+| `SPEAKER_KWS_ENABLED` | `0` | `1` / `true` 时启用本地 CTC 唤醒与预加载；未设置时以 yaml 的 `kws.enabled` 为准，**代码层默认**为关闭 |
+| `SPEAKER_KWS_KEYWORDS` | `小云小云` | 唤醒词（仅当 KWS 启用时生效） |
 | `SPEAKER_KWS_THRESHOLD` | `0.75` | 唤醒阈值 |
 | `SPEAKER_ASSISTANT_TTL_SEC` | `25` | 唤醒后对话态 TTL |
 
@@ -524,7 +526,7 @@ cd /path/to/ECHOPASS
 ./scripts/first-run-mac.sh          # 装依赖、可选复制 prod.yaml、固定 modelscope
 # 编辑 config/prod.yaml（火山 ASR、LLM 等）
 export ECHOPASS_CONFIG=config/prod.yaml
-FORCE_ONLINE=1 ./scripts/run.sh     # 首次拉 CAM++/KWS 等权重需联网
+FORCE_ONLINE=1 ./scripts/run.sh     # 首次拉 CAM++（及 kws.enabled 时 KWS）等权重需联网
 ./scripts/run.sh                    # 之后日常
 ```
 
@@ -536,7 +538,7 @@ python3.8 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 test -f config/prod.yaml || cp config/prod.yaml.example config/prod.yaml
 export ECHOPASS_CONFIG=config/prod.yaml
-FORCE_ONLINE=1 ./scripts/run.sh     # 首次
+FORCE_ONLINE=1 ./scripts/run.sh     # 首次拉 CAM++（及 kws.enabled 时 KWS）
 ./scripts/run.sh
 ```
 

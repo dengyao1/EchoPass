@@ -3174,6 +3174,12 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       if (wakeRunning) return;
       setFabState('monitoring', '启动中…');
       try {
+        const hw = await api('/api/health');
+        if (hw.kws_enabled === false) {
+          setFabState('idle', '语音唤醒已关闭（服务端）');
+          toast('语音唤醒已关闭：配置中设置 kws.enabled: true（或 SPEAKER_KWS_ENABLED=1）以启用，并会下载/加载本地 KWS 模型。', 5000);
+          return;
+        }
         await Promise.race([unlockTtsPlayback(), timeoutPromise(500)]).catch(() => {});
         wakeSubCb = await sharedMic.subscribe((frame, rate) => {
           if (!wakeRunning) return;
@@ -3256,6 +3262,7 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
         }
         const cards = [
           ['声纹模型', h.model_ready ? ['ok', '已就绪'] : ['warn', '加载中']],
+          ['语音唤醒', h.kws_enabled === false ? ['warn', '已关闭（无本地 KWS）'] : ['ok', '小云小云 KWS']],
           ['ASR', h.asr_ready ? ['ok', (() => {
             const p = String(h.asr_provider || '');
             if (p === 'volcengine/bigmodel') return '火山 · 豆包大模型';

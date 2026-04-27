@@ -602,16 +602,20 @@ class KWSEngine:
         output_dir: str = "./outputs/kws",
         threshold: float = 0.75,
         device: Optional[str] = None,
+        enabled: bool = False,
     ) -> None:
         self.keywords  = keywords
         self.model_id  = model_id
         self.output_dir = output_dir
         self.threshold = threshold
+        self.enabled   = enabled
         self._device   = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self._model    = None
         self._lock     = threading.Lock()
 
     def _ensure_model(self) -> None:
+        if not self.enabled:
+            return
         if self._model is not None:
             return
         from funasr import AutoModel
@@ -699,6 +703,8 @@ class KWSEngine:
         triggered=True 表示分数 >= threshold，即唤醒成功。
         raw_result 为模型原始输出，用于调试。
         """
+        if not self.enabled:
+            return False, None, None
         if pcm_16k.size < 1600:
             return False, None, None
         self._ensure_model()

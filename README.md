@@ -6,7 +6,7 @@
 
 ## 能做什么
 
-实时转写（火山 ASR）、说话人（CAM++，声纹默认内存）、纪要/章节（LLM，可回退规则）、唤醒词（FunASR KWS，默认「小云小云」）、TTS、导出 ZIP。架构如下。
+实时转写（火山 ASR）、说话人（CAM++，声纹默认内存）、纪要/章节（LLM，可回退规则）、唤醒词（FunASR KWS，默认**关闭**，`kws.enabled: true` 后支持「小云小云」）、TTS、导出 ZIP。架构如下。
 
 ## 架构概览
 
@@ -75,14 +75,14 @@ flowchart LR
 **步骤以 [docs/LOCAL_QUICKSTART.md](docs/LOCAL_QUICKSTART.md) 为准**，此处仅作补充。
 
 - 若 `modelscope` / `funasr` 版本冲突：`pip install --force-reinstall --no-deps modelscope==1.10.0 funasr==1.3.1`
-- **首次**从 ModelScope 等拉取 CAM++/KWS 权重需联网：在已 `export ECHOPASS_CONFIG=config/prod.yaml` 的前提下执行 `FORCE_ONLINE=1 ./scripts/run.sh`（Windows：`$env:FORCE_ONLINE=1; .\scripts\run.ps1`）。日常启动见各平台小节。
+- **首次**从 ModelScope 等拉取 **CAM++** 权重要联网。若还启用了 `kws.enabled: true`，会额外拉取 **KWS** 权重；未启用 KWS 时不会下载唤醒词模型。在已 `export ECHOPASS_CONFIG=config/prod.yaml` 的前提下执行 `FORCE_ONLINE=1 ./scripts/run.sh`（Windows：`$env:FORCE_ONLINE=1; .\scripts\run.ps1`）。日常启动见各平台小节。
 - 配置优先级：`环境变量` > `ECHOPASS_CONFIG` 指向的 yaml > 仓库模板。未设置 `ECHOPASS_CONFIG` 时默认读取 **`config/prod.yaml.example`**。必配：**火山 `asr.volc.appid` + `token`**、**`llm.api_url` + `api_key` + `model`**；`asr.volc.api=common` 时还要 `cluster`。可选：TTS、`speaker.pg_dsn`（声纹落库）等，见 [config/prod.yaml.example](config/prod.yaml.example)。本地可复制为 `config/prod.yaml` 再 `export ECHOPASS_CONFIG=config/prod.yaml`。
 - 声纹默认在**内存**；要跨重启保留再配 PostgreSQL（`sql/schema.sql` + `pg_dsn`）。
 - **Windows** 与 **macOS** 一致：先用 **`first-run-windows.ps1` / `first-run-mac.sh`** 在已 `conda activate` 的 Python 3.8 环境里装依赖；日常只用 **`run.ps1` / `run.sh`** 启动。可选：`environment.yml` 仅供你手动 `conda env create -f` 时参考（非必选）。
 
 ## 使用流程
 
-注册说话人 → 点录音 → 看转写/纪要/章节；说「小云小云」可唤醒助手；结束可导出 ZIP。
+注册说话人 → 点录音 → 看转写/纪要/章节；在 `kws.enabled: true` 时可通过「小云小云」唤醒助手；结束可导出 ZIP。
 
 ## 关键特性说明
 
@@ -130,7 +130,8 @@ flowchart LR
 
 ### 4. 唤醒词助手
 
-- 默认唤醒词是 `小云小云`
+- 需先在配置中设 `kws.enabled: true`（或 `SPEAKER_KWS_ENABLED=1`）才会加载本地 KWS 并支持「小云小云」；默认不启用
+- 默认唤醒词是 `小云小云`（在启用 KWS 时）
 - 唤醒成功后进入短时对话会话
 - 助手回答会自动结合最近会议上下文
 - 支持普通文本回答，也支持流式回答 + 流式 TTS
@@ -201,7 +202,8 @@ assistant:
 | `speaker.threshold` | 说话人识别阈值 |
 | `speaker.model_id` | CAM++ 模型 ID |
 | `speaker.pg_dsn` | 留空=仅内存；填 DSN 则声纹落 PostgreSQL |
-| `preload_models` | 启动时是否预加载 CAM++ / ASR / KWS |
+| `preload_models` | 启动时是否预加载 CAM++ / ASR；KWS 仅在 `kws.enabled: true` 时一并预加载 |
+| `kws.enabled` | 默认 `false`；`true` 时启用「小云小云」本地唤醒并会下载/加载 CTC KWS 模型 |
 | `llm.api_url` / `llm.api_key` / `llm.model` | 纪要、章节、助手对话统一使用的 LLM |
 | `llm.asr_correction` | 是否对 ASR 文本再做一轮 LLM 纠错 |
 | `asr.hotword` | 全局热词；前端参数可覆盖 |
@@ -219,6 +221,7 @@ assistant:
 
 ```bash
 export ECHOPASS_CONFIG=config/prod.yaml
+# export SPEAKER_KWS_ENABLED=1   # 需要「小云小云」本地唤醒时再开（或 yaml 里 kws.enabled: true）
 export SPEAKER_PRELOAD_MODELS=1
 export SPEAKER_DEMO_PG_DSN='postgresql://user:password@host:5432/dbname'
 export SPEAKER_VOLC_ASR_APPID='your-appid'

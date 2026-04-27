@@ -46,6 +46,9 @@ asr:
     seg_ms: 0
 
 kws:
+  # 默认 false：不预加载/不下载本地 CTC 唤醒词模型。要用「小云小云」语音唤醒时改为 true
+  # 环境变量：SPEAKER_KWS_ENABLED=1 与 yaml 中 enabled: true 等效
+  enabled: false
   keywords: "小云小云"
   threshold: 0.75
 

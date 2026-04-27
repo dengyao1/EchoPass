@@ -190,9 +190,13 @@ llm_corrector = LLMCorrector(api_url=_llm_url, api_key=_llm_key, model=_llm_mode
 llm_chat = LLMChatClient(api_url=_llm_url, api_key=_llm_key, model=_llm_model)
 
 # 唤醒词引擎（可选，关键词通过 yaml/env 配置）
+# kws.enabled 默认 false：不加载本地 CTC 唤醒模型；设为 true 才启用「小云小云」检测
+_kws_enabled = cfg("kws.enabled", "SPEAKER_KWS_ENABLED", False, to_bool)
 _kws_keywords = cfg("kws.keywords", "SPEAKER_KWS_KEYWORDS", "小云小云", str)
 _kws_threshold = cfg("kws.threshold", "SPEAKER_KWS_THRESHOLD", 0.75, float)
-kws_engine = KWSEngine(keywords=_kws_keywords, threshold=_kws_threshold)
+kws_engine = KWSEngine(
+    keywords=_kws_keywords, threshold=_kws_threshold, enabled=_kws_enabled
+)
 
 def _normalize_tts_provider(val: object) -> str:
     s = str(val or "").strip().lower()
@@ -302,12 +306,17 @@ async def _preload_models() -> None:
         except Exception as e:  # noqa: BLE001
             logger.exception("预加载失败: %s -> %s", name, e)
 
-    logger.info("开始预加载模型 (CAM++ / 火山 ASR / KWS) ...")
-    await asyncio.gather(
+    logger.info(
+        "开始预加载模型 (CAM++ / 火山 ASR%s) ...",
+        " / KWS" if _kws_enabled else "",
+    )
+    tasks = [
         _warm("CAM++ 说话人模型", engine._ensure_model),
         _warm("火山云端 ASR", asr_engine._ensure_model),
-        _warm("KWS 唤醒词模型", kws_engine._ensure_model),
-    )
+    ]
+    if _kws_enabled:
+        tasks.append(_warm("KWS 唤醒词模型", kws_engine._ensure_model))
+    await asyncio.gather(*tasks)
     logger.info("全部模型预加载完成")
 
 
@@ -439,9 +448,10 @@ def health():
         "funasr_base": str(FUNASR_BASE),
         "funasr_local_weights": True,
         "llm_correction": bool(llm_corrector) and _asr_llm_correction,
+        "kws_enabled": _kws_enabled,
         "kws_keywords": _kws_keywords,
         "kws_threshold": _kws_threshold,
-        "kws_ready": kws_engine._model is not None,
+        "kws_ready": (not _kws_enabled) or (kws_engine._model is not None),
         "tts_enabled": _tts_backend_ready(),
         "tts_provider": _tts_provider,
         "device": str(engine._device),
@@ -680,7 +690,12 @@ async def kws(request: Request, sample_rate: int, session_id: str = "default"):
     """关键词唤醒检测。Body 为 float32 小端单声道 PCM。"""
     body = await request.body()
     if len(body) < 256 or len(body) % 4 != 0:
-        return {"triggered": False, "score": None, "message": "音频过短或格式错误"}
+        return {
+            "triggered": False,
+            "score": None,
+            "kws_enabled": _kws_enabled,
+            "message": "音频过短或格式错误",
+        }
     pcm = np.frombuffer(body, dtype=np.float32).copy()
     # 重采样到 16kHz
     if sample_rate != 16000:
@@ -695,11 +710,13 @@ async def kws(request: Request, sample_rate: int, session_id: str = "default"):
         await emit_event("wakeword_detected", session_id=session_id, payload={"score": score, "keywords": _kws_keywords})
         await emit_event("assistant_session_started", session_id=session_id, payload={"ttl_sec": _assistant_ttl_sec})
     return {
+        "kws_enabled": _kws_enabled,
         "triggered": triggered,
         "score": score,
         "threshold": _kws_threshold,
         "keywords": _kws_keywords,
-        "debug_raw": str(raw),   # 调试用：模型原始返回值
+        "message": (None if _kws_enabled else "语音唤醒未启用（kws.enabled 为 false 或未设置；设为 true 才使用本地 KWS）"),
+        "debug_raw": str(raw) if raw is not None else ("" if _kws_enabled else "kws_disabled"),
     }
 
 
