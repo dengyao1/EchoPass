@@ -33,6 +33,9 @@
       --danger: #ff6b9b;
       --shadow-card: 0 30px 60px rgba(0, 0, 0, 0.5), 0 0 42px rgba(122, 92, 255, 0.12);
       --shadow-fab: 0 0 36px rgba(122, 92, 255, 0.55), 0 10px 34px rgba(255, 71, 200, 0.3);
+      --glass-bg: rgba(8, 10, 24, 0.62);
+      --glass-bg-strong: rgba(8, 10, 24, 0.88);
+      --drawer-overlay-bg: rgba(3, 1, 10, 0.6);
     }
     * { box-sizing: border-box; }
     html, body { height: 100%; }
@@ -133,7 +136,7 @@
       padding: 12px 18px;
       border-radius: 999px;
       border: 1px solid var(--border);
-      background: rgba(8, 10, 24, 0.62);
+      background: var(--glass-bg);
       backdrop-filter: blur(18px);
       -webkit-backdrop-filter: blur(18px);
       box-shadow: 0 12px 40px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255,255,255,0.06);
@@ -1014,6 +1017,21 @@
     .chat-input-bar .send-btn:disabled {
       opacity: 0.4; cursor: not-allowed; box-shadow: none;
     }
+    .chat-input-bar .chat-mic-btn {
+      width: 36px; height: 36px; border-radius: 10px; flex: 0 0 auto;
+      border: 1px solid var(--border); cursor: pointer; color: var(--muted);
+      background: rgba(255,255,255,0.05);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 1.1rem; transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
+    }
+    .chat-input-bar .chat-mic-btn:hover { color: #fff; background: rgba(255,255,255,0.1); }
+    .chat-input-bar .chat-mic-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .chat-input-bar .chat-mic-btn.active {
+      color: #fff; border-color: var(--cyan);
+      background: rgba(61, 246, 255, 0.12);
+      box-shadow: 0 0 20px rgba(61, 246, 255, 0.25);
+      animation: pulse 1.2s ease-in-out infinite;
+    }
     .chat-input-bar .options {
       display: flex; align-items: center; gap: 0.5rem;
       padding: 0.35rem 0.2rem 0;
@@ -1038,7 +1056,7 @@
       padding: 12px 20px;
       border-radius: 999px;
       border: 1px solid var(--border);
-      background: rgba(8, 10, 24, 0.62);
+      background: var(--glass-bg);
       backdrop-filter: blur(18px);
       -webkit-backdrop-filter: blur(18px);
       box-shadow: 0 12px 40px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255,255,255,0.06);
@@ -1201,7 +1219,7 @@
     /* ======== 右侧设置抽屉 ======== */
     .drawer-overlay {
       position: fixed; inset: 0;
-      background: rgba(3, 1, 10, 0.6);
+      background: var(--drawer-overlay-bg);
       opacity: 0; pointer-events: none;
       transition: opacity 0.25s;
       z-index: 300;
@@ -1345,7 +1363,7 @@
     /* 轻量 toast */
     .toast {
       position: fixed; left: 50%; top: 90px; transform: translateX(-50%);
-      background: rgba(8, 10, 24, 0.88);
+      background: var(--glass-bg-strong);
       color: #fff;
       padding: 0.65rem 1.1rem;
       border-radius: 999px;
@@ -1359,8 +1377,215 @@
     }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(4px); }
 
+    /* ═══ 设置：界面风格（data-theme 由脚本切换，见下方 THEME）═══ */
+    .drawer-hint { font-size: 0.72rem; color: var(--muted); margin: 0.15rem 0 0.55rem; line-height: 1.45; }
+    .theme-switch { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+    .theme-pill {
+      flex: 1 1 44%;
+      min-width: 6.5rem;
+      display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem;
+      padding: 0.5rem 0.65rem 0.55rem;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--panel-soft);
+      cursor: pointer; text-align: left;
+      font-size: 0.8rem; font-weight: 600; color: var(--text);
+      line-height: 1.2;
+      transition: border-color 0.2s, background 0.2s, box-shadow 0.2s, transform 0.12s;
+    }
+    .theme-pill .sub { font-size: 0.66rem; font-weight: 500; color: var(--muted); letter-spacing: 0.02em; }
+    .theme-pill:hover { background: var(--panel); border-color: var(--border-strong); }
+    .theme-pill[aria-pressed="true"] {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent-soft), 0 6px 20px var(--shadow-card);
+      background: var(--panel-strong);
+    }
+    .theme-swatch { display: flex; gap: 3px; margin-top: 0.1rem; }
+    .theme-swatch span { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .theme-swatch.aurora span:nth-child(1) { background: #3df6ff; } .theme-swatch.aurora span:nth-child(2) { background: #7a5cff; } .theme-swatch.aurora span:nth-child(3) { background: #ff47c8; }
+    .theme-swatch.midnight span:nth-child(1) { background: #22d3ee; } .theme-swatch.midnight span:nth-child(2) { background: #a5b4fc; } .theme-swatch.midnight span:nth-child(3) { background: #38bdf8; }
+    .theme-swatch.ember span:nth-child(1) { background: #fb923c; } .theme-swatch.ember span:nth-child(2) { background: #f97316; } .theme-swatch.ember span:nth-child(3) { background: #fb7185; }
+    .theme-swatch.forest span:nth-child(1) { background: #34d399; } .theme-swatch.forest span:nth-child(2) { background: #2dd4bf; } .theme-swatch.forest span:nth-child(3) { background: #4ade80; }
+    .theme-swatch.paper span:nth-child(1) { background: #0d9488; } .theme-swatch.paper span:nth-child(2) { background: #4f46e5; } .theme-swatch.paper span:nth-child(3) { background: #be185d; }
+
+    html[data-theme="midnight"] {
+      --bg: #020617; --bg-2: #0f172a;
+      --panel: rgba(30, 41, 59, 0.52); --panel-soft: rgba(15, 23, 42, 0.42);
+      --panel-strong: rgba(51, 65, 85, 0.42);
+      --border: rgba(148, 163, 184, 0.16); --border-strong: rgba(148, 163, 184, 0.28);
+      --text: #f1f5f9; --text-sub: #cbd5e1; --muted: #94a3b8;
+      --cyan: #22d3ee; --violet: #a5b4fc; --pink: #f472b6; --gold: #fbbf24; --green: #4ade80;
+      --accent: #38bdf8; --accent-2: #818cf8; --accent-soft: rgba(56, 189, 248, 0.2);
+      --accent-bubble: linear-gradient(135deg, #22d3ee 0%, #818cf8 50%, #f472b6 100%);
+      --ok: #4ade80; --warn: #fbbf24; --danger: #fb7185;
+      --shadow-card: 0 24px 48px rgba(0,0,0,0.45), 0 0 32px rgba(56, 189, 248, 0.08);
+      --shadow-fab: 0 0 40px rgba(129, 180, 252, 0.35);
+      --glass-bg: rgba(15, 23, 42, 0.72);
+      --glass-bg-strong: rgba(15, 23, 42, 0.92);
+      --drawer-overlay-bg: rgba(2, 6, 23, 0.65);
+    }
+    html[data-theme="midnight"] body {
+      background: radial-gradient(circle at 12% 10%, rgba(34, 211, 238, 0.16), transparent 26%),
+        radial-gradient(circle at 88% 12%, rgba(129, 180, 252, 0.14), transparent 24%),
+        linear-gradient(145deg, #01030a 0%, #0c1222 42%, #020617 100%);
+    }
+    html[data-theme="midnight"] body::before { opacity: 0.2; }
+    html[data-theme="midnight"] body::after { background: linear-gradient(180deg, rgba(34,211,238,0.05), transparent 32%, transparent 68%, rgba(129,180,252,0.05)); }
+    html[data-theme="midnight"] .orb.one { background: rgba(34, 211, 238, 0.2); }
+    html[data-theme="midnight"] .orb.two { background: rgba(129, 180, 252, 0.2); }
+    html[data-theme="midnight"] .orb.three { background: rgba(56, 189, 248, 0.18); }
+    html[data-theme="midnight"] .beam { background: linear-gradient(90deg, transparent, rgba(34,211,238,0.11), rgba(129,180,252,0.1), transparent); }
+    html[data-theme="midnight"] .drawer {
+      background: radial-gradient(circle at top right, rgba(129,180,252,0.16), transparent 40%),
+        radial-gradient(circle at bottom left, rgba(34,211,238,0.1), transparent 40%),
+        linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(2, 6, 23, 0.98));
+      border-left-color: rgba(148, 163, 184, 0.12);
+    }
+
+    html[data-theme="ember"] {
+      --bg: #0c0a08; --bg-2: #1c1410;
+      --panel: rgba(68, 48, 40, 0.45); --panel-soft: rgba(40, 28, 24, 0.42);
+      --panel-strong: rgba(90, 64, 52, 0.4);
+      --border: rgba(254, 215, 170, 0.14); --border-strong: rgba(251, 191, 36, 0.3);
+      --text: #fff7ed; --text-sub: #fed7aa; --muted: #a8a29e;
+      --cyan: #fbbf24; --violet: #fb923c; --pink: #fb7185; --gold: #fcd34d; --green: #86efac;
+      --accent: #ea580c; --accent-2: #f97316; --accent-soft: rgba(234, 88, 12, 0.2);
+      --accent-bubble: linear-gradient(135deg, #fbbf24 0%, #f97316 50%, #fb7185 100%);
+      --ok: #86efac; --warn: #fcd34d; --danger: #f87171;
+      --shadow-card: 0 24px 48px rgba(0,0,0,0.55), 0 0 32px rgba(234, 88, 12, 0.1);
+      --shadow-fab: 0 0 40px rgba(249, 115, 22, 0.45);
+      --glass-bg: rgba(28, 20, 16, 0.7);
+      --glass-bg-strong: rgba(20, 14, 10, 0.92);
+      --drawer-overlay-bg: rgba(8, 4, 2, 0.68);
+    }
+    html[data-theme="ember"] body {
+      background: radial-gradient(circle at 10% 8%, rgba(234, 88, 12, 0.18), transparent 28%),
+        radial-gradient(circle at 90% 20%, rgba(244, 63, 94, 0.14), transparent 22%),
+        linear-gradient(145deg, #0a0806 0%, #1a120c 50%, #0c0a08 100%);
+    }
+    html[data-theme="ember"] body::after { background: linear-gradient(180deg, rgba(234,88,12,0.04), transparent 32%, transparent 70%, rgba(244,63,94,0.04)); }
+    html[data-theme="ember"] .orb.one { background: rgba(234, 88, 12, 0.22); }
+    html[data-theme="ember"] .orb.two { background: rgba(244, 63, 94, 0.2); }
+    html[data-theme="ember"] .orb.three { background: rgba(251, 191, 36, 0.16); }
+    html[data-theme="ember"] .beam { background: linear-gradient(90deg, transparent, rgba(251,146,60,0.12), rgba(244,63,94,0.1), transparent); }
+    html[data-theme="ember"] .drawer {
+      background: radial-gradient(circle at top right, rgba(234, 88, 12, 0.14), transparent 38%),
+        linear-gradient(180deg, rgba(30, 22, 16, 0.96), rgba(12, 8, 6, 0.98));
+      border-left-color: rgba(251, 191, 36, 0.1);
+    }
+
+    html[data-theme="forest"] {
+      --bg: #03120c; --bg-2: #052e1c;
+      --panel: rgba(6, 78, 59, 0.35); --panel-soft: rgba(4, 40, 30, 0.38);
+      --panel-strong: rgba(16, 100, 72, 0.38);
+      --border: rgba(52, 211, 153, 0.12); --border-strong: rgba(16, 185, 129, 0.28);
+      --text: #ecfdf5; --text-sub: #a7f3d0; --muted: #86b3a0;
+      --cyan: #2dd4bf; --violet: #6ee7b7; --pink: #4ade80; --gold: #fbbf24; --green: #4ade80;
+      --accent: #10b981; --accent-2: #14b8a6; --accent-soft: rgba(16, 185, 129, 0.22);
+      --accent-bubble: linear-gradient(135deg, #2dd4bf 0%, #10b981 50%, #4ade80 100%);
+      --ok: #4ade80; --warn: #fbbf24; --danger: #f87171;
+      --shadow-card: 0 24px 48px rgba(0,0,0,0.5), 0 0 32px rgba(16, 185, 129, 0.1);
+      --shadow-fab: 0 0 40px rgba(16, 185, 129, 0.45);
+      --glass-bg: rgba(6, 32, 24, 0.7);
+      --glass-bg-strong: rgba(3, 24, 16, 0.92);
+      --drawer-overlay-bg: rgba(1, 20, 12, 0.7);
+    }
+    html[data-theme="forest"] body {
+      background: radial-gradient(circle at 8% 12%, rgba(45, 212, 191, 0.16), transparent 28%),
+        radial-gradient(circle at 88% 18%, rgba(16, 185, 129, 0.12), transparent 24%),
+        linear-gradient(150deg, #020a08 0%, #052a1a 45%, #03120c 100%);
+    }
+    html[data-theme="forest"] body::after { background: linear-gradient(180deg, rgba(16,185,129,0.04), transparent 32%, transparent 70%, rgba(45,212,191,0.04)); }
+    html[data-theme="forest"] .orb.one { background: rgba(16, 185, 129, 0.2); }
+    html[data-theme="forest"] .orb.two { background: rgba(45, 212, 191, 0.2); }
+    html[data-theme="forest"] .orb.three { background: rgba(74, 222, 128, 0.16); }
+    html[data-theme="forest"] .beam { background: linear-gradient(90deg, transparent, rgba(16,185,129,0.1), rgba(45,212,191,0.1), transparent); }
+    html[data-theme="forest"] .drawer {
+      background: radial-gradient(circle at top right, rgba(16, 185, 129, 0.14), transparent 40%),
+        linear-gradient(180deg, rgba(6, 50, 36, 0.95), rgba(2, 18, 12, 0.98));
+      border-left-color: rgba(45, 212, 191, 0.12);
+    }
+
+    /* 纸本：浅色高对比，适合白天环境 */
+    html[data-theme="paper"] {
+      color-scheme: light;
+      --bg: #f4f0e8; --bg-2: #ebe4d8;
+      --panel: rgba(255, 255, 255, 0.75); --panel-soft: rgba(255, 255, 255, 0.55);
+      --panel-strong: rgba(0, 0, 0, 0.06);
+      --border: rgba(0, 0, 0, 0.1); --border-strong: rgba(0, 0, 0, 0.16);
+      --text: #151821; --text-sub: #2a3142; --muted: #5c6470;
+      --cyan: #0f766e; --violet: #4f46e5; --pink: #be185d; --gold: #b45309; --green: #166534;
+      --accent: #4f46e5; --accent-2: #0d9488; --accent-soft: rgba(79, 70, 229, 0.12);
+      --accent-bubble: linear-gradient(135deg, #0d9488 0%, #4f46e5 50%, #a21caf 100%);
+      --ok: #166534; --warn: #b45309; --danger: #b91c1c;
+      --shadow-card: 0 20px 44px rgba(0,0,0,0.08);
+      --shadow-fab: 0 4px 24px rgba(79, 70, 229, 0.2);
+      --glass-bg: rgba(255, 255, 255, 0.8);
+      --glass-bg-strong: rgba(255, 255, 255, 0.96);
+      --drawer-overlay-bg: rgba(30, 25, 20, 0.35);
+    }
+    html[data-theme="paper"] body {
+      background: radial-gradient(circle at 12% 10%, rgba(13, 148, 136, 0.1), transparent 32%),
+        radial-gradient(circle at 90% 8%, rgba(79, 70, 229, 0.1), transparent 30%),
+        linear-gradient(168deg, #faf7f0 0%, #e8e2d6 100%);
+    }
+    html[data-theme="paper"] body::before {
+      background: linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px);
+      background-size: 36px 36px; opacity: 0.35; mask-image: radial-gradient(circle at center, black 48%, transparent 100%);
+    }
+    html[data-theme="paper"] body::after { opacity: 0.5; }
+    html[data-theme="paper"] a { color: #0d9488; }
+    html[data-theme="paper"] .orb { opacity: 0.2; }
+    html[data-theme="paper"] .orb.one { background: rgba(13, 148, 136, 0.35); }
+    html[data-theme="paper"] .orb.two { background: rgba(79, 70, 229, 0.3); }
+    html[data-theme="paper"] .orb.three { background: rgba(190, 24, 93, 0.2); }
+    html[data-theme="paper"] .beam { opacity: 0.5; }
+    html[data-theme="paper"] .noise { opacity: 0.04; }
+    html[data-theme="paper"] .cursor-glow { opacity: 0.35; }
+    html[data-theme="paper"] .header,
+    html[data-theme="paper"] .footer-bar { border-color: var(--border); }
+    html[data-theme="paper"] .drawer {
+      background: linear-gradient(195deg, rgba(255,255,255,0.98) 0%, rgba(240, 233, 220, 0.99) 100%);
+      border-left: 1px solid var(--border);
+      box-shadow: -12px 0 40px rgba(0,0,0,0.08);
+    }
+    html[data-theme="paper"] .drawer-header h2 {
+      background: linear-gradient(135deg, #1e293b, #0d9488, #4f46e5);
+      -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    html[data-theme="paper"] .drawer-section input[type="text"],
+    html[data-theme="paper"] .drawer-section input[type="number"],
+    html[data-theme="paper"] .drawer-section input[type="file"] {
+      background: #fff; border-color: var(--border);
+    }
+    html[data-theme="paper"] .drawer-section .btn { background: #fff; }
+    html[data-theme="paper"] .health-card .v { color: var(--text); }
+    html[data-theme="paper"] .toast { color: var(--text); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 1px var(--border); }
+    html[data-theme="paper"] .chat-input-bar .row { background: #fff; }
+    html[data-theme="paper"] .chat-input-bar input[type="text"] { color: var(--text); }
+    html[data-theme="paper"] .chat-input-bar input::placeholder { color: var(--muted); }
+    html[data-theme="paper"] .col {
+      background: linear-gradient(180deg, rgba(255,255,255,0.94), rgba(245, 240, 230, 0.88));
+      border-color: var(--border);
+    }
+    html[data-theme="paper"] .col::before {
+      background: radial-gradient(circle at top right, rgba(13, 148, 136, 0.1), transparent 35%);
+    }
+    html[data-theme="paper"] .col-header { border-bottom-color: var(--border); }
+    html[data-theme="paper"] .col-header h2 { color: var(--text); }
+
     .hidden { display: none !important; }
   </style>
+  <script>
+    (function () {
+      try {
+        var k = 'echopass_ui_theme', t = localStorage.getItem(k);
+        if (t && t !== 'aurora' && { midnight: 1, ember: 1, forest: 1, paper: 1 }[t]) {
+          document.documentElement.setAttribute('data-theme', t);
+        }
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
   <div class="cursor-glow" id="cursorGlow"></div>
@@ -1521,6 +1746,7 @@
         <div class="chat-input-bar">
           <div class="row">
             <input type="text" id="chatInput" placeholder="有问题尽管问我…" autocomplete="off" />
+            <button type="button" class="chat-mic-btn" id="btnChatMic" title="主动语音问小云（与「小云小云」唤醒后相同：说完自动识别）" aria-pressed="false">🎤</button>
             <button class="send-btn" id="chatSend" title="发送">➤</button>
           </div>
           <div class="options">
@@ -1577,6 +1803,37 @@
       </button>
     </header>
     <div class="drawer-body">
+      <section class="drawer-section">
+        <h3>界面</h3>
+        <p class="drawer-hint">整体配色、背景光效与雾面；仅保存在本机浏览器。</p>
+        <div class="theme-switch" role="group" aria-label="界面风格">
+          <button type="button" class="theme-pill" data-theme-id="aurora" title="青紫粉霓虹 · 会议厅默认">
+            <span>霓虹</span>
+            <span class="sub">青紫粉 · 默认</span>
+            <span class="theme-swatch aurora" aria-hidden="true"><span></span><span></span><span></span></span>
+          </button>
+          <button type="button" class="theme-pill" data-theme-id="midnight" title="冷色雾蓝">
+            <span>极夜</span>
+            <span class="sub">雾蓝靛青 · 冷静</span>
+            <span class="theme-swatch midnight" aria-hidden="true"><span></span><span></span><span></span></span>
+          </button>
+          <button type="button" class="theme-pill" data-theme-id="ember" title="暖橙玫瑰">
+            <span>余烬</span>
+            <span class="sub">暖橙与玫 · 沉浸</span>
+            <span class="theme-swatch ember" aria-hidden="true"><span></span><span></span><span></span></span>
+          </button>
+          <button type="button" class="theme-pill" data-theme-id="forest" title="松石绿系">
+            <span>森语</span>
+            <span class="sub">松绿与青 · 护目</span>
+            <span class="theme-swatch forest" aria-hidden="true"><span></span><span></span><span></span></span>
+          </button>
+          <button type="button" class="theme-pill" data-theme-id="paper" title="米白纸感浅色" style="flex:1 1 100%;">
+            <span>纸本</span>
+            <span class="sub">米白浅色 · 日光环境</span>
+            <span class="theme-swatch paper" aria-hidden="true"><span></span><span></span><span></span></span>
+          </button>
+        </div>
+      </section>
       <section class="drawer-section">
         <h3>服务状态</h3>
         <div class="health-grid" id="healthGrid"></div>
@@ -2672,6 +2929,12 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
     let wakePhase = 'IDLE'; // IDLE | MONITORING | WOKEN | LISTENING | RECOGNIZING
     let wakeListenBuf = [], wakeListenTimer = null, wakeSilenceFrames = 0;
     let wakeListenStartTs = 0;
+    /** 右栏「主动语音」：不经过唤醒词，流程同唤醒后拾音 → 识别 → 助手 */
+    let manualListenActive = false;
+    let manualChatSub = null;
+    let manualChatPhase = 'IDLE'; // IDLE | LISTENING | RECOGNIZING
+    let manualChatBuf = [], manualChatTimer = null, manualSilenceFrames = 0, manualChatStartTs = 0;
+    let manualPostAckGraceUntil = 0;
     let kwsPollTimer = null, kwsBusy = false;
     /** 来自 /api/health 的 wake_ack_audio，相对站点根（即 echopass/static/） */
     let wakeAckAudioRel = '';
@@ -2734,6 +2997,7 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
     }
     function startKwsPoll() {
       kwsPollTimer = setInterval(async () => {
+        if (manualListenActive) return;
         if (!wakeRunning || wakePhase !== 'MONITORING' || kwsBusy) return;
         const rate = sharedMic.sampleRate;
         const win = wakeGetWindow();
@@ -2767,6 +3031,7 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
     }
 
     function onWakeTriggered(score) {
+      if (manualListenActive) return;
       if (wakePhase !== 'MONITORING') return;
       if (kwsPollTimer) { clearInterval(kwsPollTimer); kwsPollTimer = null; }
       wakePostAckGraceUntil = 0;
@@ -2991,6 +3256,270 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       return { fullText: full, usedStreamTts, deferredPcm: deferredPcm || [] };
     }
 
+    function getChatSidsForAssistant() {
+      const sessionId = state.liveRunning ? state.liveSessionId : 'chat_' + (state.liveSessionId || 'default');
+      const meetingSessionId = state.liveSessionId || sessionId;
+      return { sessionId, meetingSessionId };
+    }
+
+    /**
+     * 与「小云小云」唤醒后相同：ASR 文本 → FAB + 右栏（showFabBubble 拦截）→ 流式/非流式助手。
+     * @param {string} txt 识别结果
+     * @param {string} who 说话人
+     * @param {string} sessionId 与右栏 /api/assistant 的 session_id 一致
+     * @param {string} meetingSessionId 会议转写范围
+     */
+    async function runWakeStyleAssistantAfterAsr(txt, who, sessionId, meetingSessionId) {
+      if (!txt) {
+        showFabBubble('（未识别到内容）', '');
+        return;
+      }
+      setFabState('answering', '小云回复中…');
+      const useTts = $('settingWakeTtsEnabled').checked;
+      if (useTts) {
+        try {
+          await unlockTtsPlayback();
+          fabTwShown = '';
+          fabTwTarget = '';
+          clearFabTypewriter();
+          $('fabUserText').textContent = txt;
+          $('fabBubble').classList.add('show');
+          const r = await runAssistantStreamSse({
+            userTxt: txt,
+            who,
+            sessionId: sessionId,
+            meetingSessionId,
+            useTts: true,
+            deferAudio: true,
+            onFabDelta: (full) => {
+              fabTwTarget = full;
+              ensureFabTypewriter();
+            },
+          });
+          const reply = (r.fullText || '').trim();
+          const replyShown = reply || '（模型无回复）';
+          fabTwTarget = replyShown;
+          ensureFabTypewriter();
+          await waitFabTypewriterDone();
+          clearFabTypewriter();
+          fabTwShown = replyShown;
+          showFabBubble(txt, replyShown);
+          if (r.deferredPcm && r.deferredPcm.length) {
+            setFabTtsState('playing');
+            await playPcmB64Queue(r.deferredPcm);
+            setFabTtsState('done');
+          } else if (!r.usedStreamTts && reply) {
+            setFabTtsState('playing');
+            await playTts(reply, sessionId);
+          } else {
+            setFabTtsState('off');
+          }
+        } catch (err) {
+          clearFabTypewriter();
+          console.warn('[assistant/stream]', err);
+          setFabTtsState('error');
+          toast('助手流式失败：' + (err && err.message ? err.message : '未知错误'), 4000);
+          showFabBubble(txt, '（回复失败）');
+        }
+      } else {
+        const ar = await api('/api/assistant/reply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: txt,
+            session_id: sessionId,
+            speaker: who,
+            use_tts: false,
+            meeting_session_id: meetingSessionId,
+          }),
+        });
+        const reply = (ar.assistant_text || '').trim();
+        const replyShown = reply || '（模型无回复）';
+        fabTwShown = '';
+        fabTwTarget = '';
+        clearFabTypewriter();
+        $('fabUserText').textContent = txt;
+        $('fabBubble').classList.add('show');
+        fabTwTarget = replyShown;
+        ensureFabTypewriter();
+        await waitFabTypewriterDone();
+        clearFabTypewriter();
+        fabTwShown = replyShown;
+        showFabBubble(txt, replyShown);
+        if (reply) setFabTtsState('off');
+      }
+    }
+
+    function bumpManualListenTimerAfterAck() {
+      if (manualChatPhase !== 'LISTENING') return;
+      if (manualChatTimer) clearTimeout(manualChatTimer);
+      const elapsed = Date.now() - manualChatStartTs;
+      const remain = Math.max(
+        4000,
+        WAKE_MAX_SEC * 1000 - elapsed + WAKE_POST_ACK_GRACE_MS,
+      );
+      manualChatTimer = setTimeout(() => flushManualChat(true), remain);
+    }
+
+    async function playChatVoiceAck() {
+      const rel = (wakeAckAudioRel || '').trim();
+      if (!rel) return;
+      const url = '/' + rel.split('/').map(encodeURIComponent).join('/');
+      const finishAck = () => {
+        manualPostAckGraceUntil = Date.now() + WAKE_POST_ACK_GRACE_MS;
+        bumpManualListenTimerAfterAck();
+      };
+      try {
+        if (currentWakeAckAudio) {
+          try { currentWakeAckAudio.pause(); } catch (_) {}
+          currentWakeAckAudio = null;
+        }
+        await unlockTtsPlayback();
+        const audio = new Audio(url);
+        currentWakeAckAudio = audio;
+        await audio.play();
+        await new Promise((resolve) => {
+          const fin = () => {
+            if (currentWakeAckAudio === audio) currentWakeAckAudio = null;
+            finishAck();
+            resolve();
+          };
+          audio.addEventListener('ended', fin, { once: true });
+          audio.addEventListener('error', fin, { once: true });
+        });
+      } catch (_) {
+        finishAck();
+      }
+    }
+
+    function stopManualChatListen() {
+      manualChatPhase = 'IDLE';
+      manualListenActive = false;
+      manualPostAckGraceUntil = 0;
+      if (manualChatTimer) { clearTimeout(manualChatTimer); manualChatTimer = null; }
+      if (manualChatSub) { sharedMic.unsubscribe(manualChatSub); manualChatSub = null; }
+      manualChatBuf = [];
+      const b = $('btnChatMic');
+      if (b) { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); }
+      const fl = $('fabLabel');
+      if (fl && $('chatWakeState')) $('chatWakeState').textContent = fl.textContent;
+    }
+
+    function manualChatFrameCb(frame, rate) {
+      if (manualChatPhase !== 'LISTENING') return;
+      manualChatBuf.push(frame);
+      let rms = 0;
+      for (let i = 0; i < frame.length; i++) rms += frame[i] * frame[i];
+      rms = Math.sqrt(rms / frame.length);
+      const st = $('settingSilenceThresh');
+      const silThresh = st ? (parseFloat(st.value) || 0.01) : 0.01;
+      const framesPerSec = rate / Math.max(1, frame.length);
+      const silFrameThresh = Math.max(1, Math.ceil((WAKE_SIL_MS / 1000) * framesPerSec));
+      const listenedSec = manualChatBuf.reduce((s, a) => s + a.length, 0) / rate;
+      const inPostAckGrace = Date.now() < manualPostAckGraceUntil;
+      if (inPostAckGrace) {
+        manualSilenceFrames = 0;
+      } else if (rms < silThresh) {
+        manualSilenceFrames++;
+        if (manualSilenceFrames >= silFrameThresh && listenedSec >= WAKE_MIN_SEC) {
+          flushManualChat(false);
+        }
+      } else {
+        manualSilenceFrames = 0;
+      }
+    }
+
+    async function flushManualChat(force) {
+      if (manualChatPhase !== 'LISTENING') return;
+      if (manualChatTimer) { clearTimeout(manualChatTimer); manualChatTimer = null; }
+      const total = manualChatBuf.reduce((s, a) => s + a.length, 0);
+      const rate = sharedMic.sampleRate;
+      if (!force && total < rate * WAKE_MIN_SEC) {
+        manualChatPhase = 'LISTENING';
+        const remain = Math.max(1500, WAKE_MAX_SEC * 1000 - (Date.now() - manualChatStartTs));
+        manualChatTimer = setTimeout(() => flushManualChat(true), remain);
+        return;
+      }
+      manualChatPhase = 'RECOGNIZING';
+      setFabState('recognizing', '识别中…');
+      const pcm = new Float32Array(total);
+      let o = 0;
+      for (const a of manualChatBuf) { pcm.set(a, o); o += a.length; }
+      manualChatBuf = [];
+      const th = getThreshold();
+      const { sessionId, meetingSessionId } = getChatSidsForAssistant();
+      const btn = $('btnChatMic');
+      if (btn) btn.disabled = true;
+      try {
+        const buf = pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength);
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort('timeout'), 30000);
+        const hwEl = $('settingHotword');
+        const hw = hwEl ? (hwEl.value || '').trim() : '';
+        const url = '/api/recognize_pcm?sample_rate=' + rate
+          + '&threshold=' + th
+          + '&session_id=' + encodeURIComponent(sessionId)
+          + (hw ? '&hotword=' + encodeURIComponent(hw) : '');
+        const r = await api(url, {
+          method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: buf, signal: ctrl.signal,
+        }).finally(() => clearTimeout(timer));
+        const who = r.speaker || '未知';
+        const txt = r.text || '';
+        await runWakeStyleAssistantAfterAsr(txt, who, sessionId, meetingSessionId);
+      } catch (e) {
+        const msg = (e && (e.name === 'AbortError' || /abort/i.test(e.message || ''))) ? '识别超时' :
+          ('识别失败：' + (e && e.message ? e.message : '未知错误'));
+        showFabBubble('', msg);
+      } finally {
+        if (btn) btn.disabled = false;
+        stopManualChatListen();
+        if (wakeRunning) {
+          wakePhase = 'MONITORING';
+          setFabState('monitoring', '监听中…');
+        } else {
+          wakePhase = 'IDLE';
+          setFabState('idle', '随会议录音开启唤醒监听');
+        }
+      }
+    }
+
+    async function startOrToggleManualChatVoice() {
+      if (state.chatInFlight) { toast('请等待上一条回答结束', 3000); return; }
+      if (wakePhase === 'LISTENING') {
+        toast('当前处于「小云小云」唤醒后的拾音中，请先说/录完那一句。', 4500);
+        return;
+      }
+      if (manualChatPhase === 'RECOGNIZING') return;
+      if (manualChatPhase === 'LISTENING') {
+        stopManualChatListen();
+        if (wakeRunning) { setFabState('monitoring', '监听中…'); }
+        else { setFabState('idle', '随会议录音开启唤醒监听'); }
+        return;
+      }
+      try {
+        await Promise.race([unlockTtsPlayback(), timeoutPromise(500)]);
+      } catch (_) {}
+      manualListenActive = true;
+      manualChatBuf = []; manualSilenceFrames = 0; manualChatStartTs = Date.now(); manualPostAckGraceUntil = 0;
+      manualChatPhase = 'LISTENING';
+      setFabState('woken', '主动语音，请说…');
+      const cws = $('chatWakeState');
+      if (cws) cws.textContent = '主动语音 · 正在听，再点可取消';
+      const b = $('btnChatMic');
+      if (b) { b.classList.add('active'); b.setAttribute('aria-pressed', 'true'); }
+      try {
+        manualChatSub = await sharedMic.subscribe(manualChatFrameCb);
+      } catch (e) {
+        stopManualChatListen();
+        if (wakeRunning) { setFabState('monitoring', '监听中…'); }
+        else { setFabState('idle', '随会议录音开启唤醒监听'); }
+        toast('无法打开麦克风：' + (e && e.message ? e.message : '未知错误'), 4000);
+        return;
+      }
+      manualChatTimer = setTimeout(() => flushManualChat(true), WAKE_MAX_SEC * 1000);
+      playChatVoiceAck().catch(() => {});
+    }
+
     async function flushWakeUtterance(force) {
       if (wakePhase !== 'LISTENING') return;
       if (wakeListenTimer) { clearTimeout(wakeListenTimer); wakeListenTimer = null; }
@@ -3025,85 +3554,8 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
         }).finally(() => clearTimeout(timer));
         const who = r.speaker || '未知';
         const txt = r.text || '';
-        if (!txt) {
-          showFabBubble('（未识别到内容）', '');
-        } else {
-          setFabState('answering', '小云回复中…');
-          const useTts = $('settingWakeTtsEnabled').checked;
-          const meetingSessionId = (state.liveRunning && state.liveSessionId) ? state.liveSessionId : sid;
-          if (useTts) {
-            try {
-              await unlockTtsPlayback();
-              fabTwShown = '';
-              fabTwTarget = '';
-              clearFabTypewriter();
-              $('fabUserText').textContent = txt;
-              $('fabBubble').classList.add('show');
-              const r = await runAssistantStreamSse({
-                userTxt: txt,
-                who,
-                sessionId: sid,
-                meetingSessionId,
-                useTts: true,
-                deferAudio: true,
-                onFabDelta: (full) => {
-                  fabTwTarget = full;
-                  ensureFabTypewriter();
-                },
-              });
-              const reply = (r.fullText || '').trim();
-              const replyShown = reply || '（模型无回复）';
-              fabTwTarget = replyShown;
-              ensureFabTypewriter();
-              await waitFabTypewriterDone();
-              clearFabTypewriter();
-              fabTwShown = replyShown;
-              showFabBubble(txt, replyShown);
-              if (r.deferredPcm && r.deferredPcm.length) {
-                setFabTtsState('playing');
-                await playPcmB64Queue(r.deferredPcm);
-                setFabTtsState('done');
-              } else if (!r.usedStreamTts && reply) {
-                setFabTtsState('playing');
-                await playTts(reply, sid);
-              } else {
-                setFabTtsState('off');
-              }
-            } catch (err) {
-              clearFabTypewriter();
-              console.warn('[assistant/stream]', err);
-              setFabTtsState('error');
-              toast('助手流式失败：' + (err && err.message ? err.message : '未知错误'), 4000);
-              showFabBubble(txt, '（回复失败）');
-            }
-          } else {
-            const ar = await api('/api/assistant/reply', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                text: txt,
-                session_id: sid,
-                speaker: who,
-                use_tts: false,
-                meeting_session_id: meetingSessionId,
-              }),
-            });
-            const reply = (ar.assistant_text || '').trim();
-            const replyShown = reply || '（模型无回复）';
-            fabTwShown = '';
-            fabTwTarget = '';
-            clearFabTypewriter();
-            $('fabUserText').textContent = txt;
-            $('fabBubble').classList.add('show');
-            fabTwTarget = replyShown;
-            ensureFabTypewriter();
-            await waitFabTypewriterDone();
-            clearFabTypewriter();
-            fabTwShown = replyShown;
-            showFabBubble(txt, replyShown);
-            if (reply) setFabTtsState('off');
-          }
-        }
+        const meetingSessionId = (state.liveRunning && state.liveSessionId) ? state.liveSessionId : sid;
+        await runWakeStyleAssistantAfterAsr(txt, who, sid, meetingSessionId);
       } catch (e) {
         const msg = (e && (e.name === 'AbortError' || /abort/i.test(e.message || ''))) ? '识别超时' :
           ('识别失败：' + (e && e.message ? e.message : '未知错误'));
@@ -4060,6 +4512,10 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
     async function sendChat(rawText) {
       const text = (rawText == null ? $('chatInput').value : rawText).trim();
       if (!text || state.chatInFlight) return;
+      if (manualChatPhase === 'LISTENING' || manualChatPhase === 'RECOGNIZING') {
+        toast('请先完成或取消当前「主动语音」拾音。', 3500);
+        return;
+      }
       $('chatInput').value = '';
       state.chatMessages.push({ role: 'user', text });
       state.chatMessages.push({
@@ -4068,6 +4524,8 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       renderChatHistory();
       state.chatInFlight = true;
       $('chatSend').disabled = true;
+      const micBtn = $('btnChatMic');
+      if (micBtn) micBtn.disabled = true;
       const sid = state.liveRunning ? state.liveSessionId : 'chat_' + (state.liveSessionId || 'default');
       const meetingSessionId = state.liveSessionId || sid;
       const useChatTts = $('settingWakeTtsEnabled').checked;
@@ -4120,6 +4578,8 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
         clearChatTypewriter();
         state.chatInFlight = false;
         $('chatSend').disabled = false;
+        const micBtn2 = $('btnChatMic');
+        if (micBtn2) micBtn2.disabled = false;
         renderChatHistory();
       }
     }
@@ -4127,6 +4587,8 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
     function initChat() {
       const send = () => sendChat(null);
       $('chatSend').addEventListener('click', send);
+      const bMic = $('btnChatMic');
+      if (bMic) bMic.addEventListener('click', () => { startOrToggleManualChatVoice(); });
       $('chatInput').addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); send(); }
       });
@@ -4269,9 +4731,40 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
     updateExportButtonState();
 
     // ═══════════════════════════════════════════════════
+    // 16b) 界面风格（与 head 内预载一致，localStorage）
+    // ═══════════════════════════════════════════════════
+    const THEME_STORAGE_KEY = 'echopass_ui_theme';
+    const THEME_IDS = ['aurora', 'midnight', 'ember', 'forest', 'paper'];
+    function applyUiTheme(id) {
+      if (!THEME_IDS.includes(id)) id = 'aurora';
+      if (id === 'aurora') {
+        document.documentElement.removeAttribute('data-theme');
+      } else {
+        document.documentElement.setAttribute('data-theme', id);
+      }
+      try { localStorage.setItem(THEME_STORAGE_KEY, id); } catch (_) {}
+      document.querySelectorAll('.theme-pill').forEach((btn) => {
+        const bid = btn.getAttribute('data-theme-id');
+        btn.setAttribute('aria-pressed', bid === id ? 'true' : 'false');
+      });
+    }
+    function initUiTheme() {
+      let saved = 'aurora';
+      try { saved = localStorage.getItem(THEME_STORAGE_KEY) || 'aurora'; } catch (_) {}
+      if (!THEME_IDS.includes(saved)) saved = 'aurora';
+      applyUiTheme(saved);
+      document.querySelectorAll('.theme-pill').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          applyUiTheme(btn.getAttribute('data-theme-id') || 'aurora');
+        });
+      });
+    }
+
+    // ═══════════════════════════════════════════════════
     // 17) 引导
     // ═══════════════════════════════════════════════════
     function bootstrap() {
+      initUiTheme();
       updateHeaderDate();
       setInterval(updateHeaderDate, 30_000);
       setRecUi('stopped');
