@@ -1378,8 +1378,27 @@
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(4px); }
 
     /* ═══ 设置：界面风格（data-theme 由脚本切换，见下方 THEME）═══ */
-    .drawer-hint { font-size: 0.72rem; color: var(--muted); margin: 0.15rem 0 0.55rem; line-height: 1.45; }
+    .drawer-hint,
+    .theme-popover-hint { font-size: 0.72rem; color: var(--muted); margin: 0 0 0.55rem; line-height: 1.45; }
+    .theme-popover-wrap { position: relative; }
+    .theme-popover {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 10px);
+      z-index: 500;
+      width: min(300px, calc(100vw - 28px));
+      padding: 0.85rem 0.95rem 0.95rem;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: var(--glass-bg-strong);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      box-shadow: var(--shadow-card);
+    }
+    .theme-popover[hidden] { display: none !important; }
     .theme-switch { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+    .theme-switch--popover { flex-direction: column; flex-wrap: nowrap; }
+    .theme-switch--popover .theme-pill { flex: 1 1 auto; min-width: 0; width: 100%; }
     .theme-pill {
       flex: 1 1 44%;
       min-width: 6.5rem;
@@ -1621,6 +1640,44 @@
             <path d="M11 12h2v2h-2zM11 16h2v2h-2z"/>
           </svg>
         </button>
+        <div class="theme-popover-wrap">
+          <button type="button" class="icon-btn" id="btnThemeUi" title="界面风格" aria-expanded="false" aria-controls="themePopover" aria-haspopup="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+              <path d="M12 8v4M9 10h6"/>
+            </svg>
+          </button>
+          <div id="themePopover" class="theme-popover" role="dialog" aria-label="选择界面风格" hidden>
+            <p class="theme-popover-hint">配色与背景仅保存在本机浏览器。</p>
+            <div class="theme-switch theme-switch--popover" role="group" aria-label="界面风格">
+              <button type="button" class="theme-pill" data-theme-id="aurora" title="青紫粉霓虹 · 会议厅默认">
+                <span>霓虹</span>
+                <span class="sub">青紫粉 · 默认</span>
+                <span class="theme-swatch aurora" aria-hidden="true"><span></span><span></span><span></span></span>
+              </button>
+              <button type="button" class="theme-pill" data-theme-id="midnight" title="冷色雾蓝">
+                <span>极夜</span>
+                <span class="sub">雾蓝靛青 · 冷静</span>
+                <span class="theme-swatch midnight" aria-hidden="true"><span></span><span></span><span></span></span>
+              </button>
+              <button type="button" class="theme-pill" data-theme-id="ember" title="暖橙玫瑰">
+                <span>余烬</span>
+                <span class="sub">暖橙与玫 · 沉浸</span>
+                <span class="theme-swatch ember" aria-hidden="true"><span></span><span></span><span></span></span>
+              </button>
+              <button type="button" class="theme-pill" data-theme-id="forest" title="松石绿系">
+                <span>森语</span>
+                <span class="sub">松绿与青 · 护目</span>
+                <span class="theme-swatch forest" aria-hidden="true"><span></span><span></span><span></span></span>
+              </button>
+              <button type="button" class="theme-pill" data-theme-id="paper" title="米白纸感浅色">
+                <span>纸本</span>
+                <span class="sub">米白浅色 · 日光环境</span>
+                <span class="theme-swatch paper" aria-hidden="true"><span></span><span></span><span></span></span>
+              </button>
+            </div>
+          </div>
+        </div>
         <button class="icon-btn" id="btnOpenSettings" title="设置">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.36.16.64.44.82.76.18.32.26.69.18 1.04H21a2 2 0 0 1 0 4h-.09c-.08.35-.02.72.16 1.04Z"/></svg>
         </button>
@@ -1746,7 +1803,7 @@
         <div class="chat-input-bar">
           <div class="row">
             <input type="text" id="chatInput" placeholder="有问题尽管问我…" autocomplete="off" />
-            <button type="button" class="chat-mic-btn" id="btnChatMic" title="主动语音问小云（与「小云小云」唤醒后相同：说完自动识别）" aria-pressed="false">🎤</button>
+            <button type="button" class="chat-mic-btn" id="btnChatMic" title="语音输入：说完后识别文字填入输入框，可编辑再发送" aria-pressed="false">🎤</button>
             <button class="send-btn" id="chatSend" title="发送">➤</button>
           </div>
           <div class="options">
@@ -1803,37 +1860,6 @@
       </button>
     </header>
     <div class="drawer-body">
-      <section class="drawer-section">
-        <h3>界面</h3>
-        <p class="drawer-hint">整体配色、背景光效与雾面；仅保存在本机浏览器。</p>
-        <div class="theme-switch" role="group" aria-label="界面风格">
-          <button type="button" class="theme-pill" data-theme-id="aurora" title="青紫粉霓虹 · 会议厅默认">
-            <span>霓虹</span>
-            <span class="sub">青紫粉 · 默认</span>
-            <span class="theme-swatch aurora" aria-hidden="true"><span></span><span></span><span></span></span>
-          </button>
-          <button type="button" class="theme-pill" data-theme-id="midnight" title="冷色雾蓝">
-            <span>极夜</span>
-            <span class="sub">雾蓝靛青 · 冷静</span>
-            <span class="theme-swatch midnight" aria-hidden="true"><span></span><span></span><span></span></span>
-          </button>
-          <button type="button" class="theme-pill" data-theme-id="ember" title="暖橙玫瑰">
-            <span>余烬</span>
-            <span class="sub">暖橙与玫 · 沉浸</span>
-            <span class="theme-swatch ember" aria-hidden="true"><span></span><span></span><span></span></span>
-          </button>
-          <button type="button" class="theme-pill" data-theme-id="forest" title="松石绿系">
-            <span>森语</span>
-            <span class="sub">松绿与青 · 护目</span>
-            <span class="theme-swatch forest" aria-hidden="true"><span></span><span></span><span></span></span>
-          </button>
-          <button type="button" class="theme-pill" data-theme-id="paper" title="米白纸感浅色" style="flex:1 1 100%;">
-            <span>纸本</span>
-            <span class="sub">米白浅色 · 日光环境</span>
-            <span class="theme-swatch paper" aria-hidden="true"><span></span><span></span><span></span></span>
-          </button>
-        </div>
-      </section>
       <section class="drawer-section">
         <h3>服务状态</h3>
         <div class="health-grid" id="healthGrid"></div>
@@ -3447,7 +3473,7 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       for (const a of manualChatBuf) { pcm.set(a, o); o += a.length; }
       manualChatBuf = [];
       const th = getThreshold();
-      const { sessionId, meetingSessionId } = getChatSidsForAssistant();
+      const { sessionId } = getChatSidsForAssistant();
       const btn = $('btnChatMic');
       if (btn) btn.disabled = true;
       try {
@@ -3463,9 +3489,17 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
         const r = await api(url, {
           method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: buf, signal: ctrl.signal,
         }).finally(() => clearTimeout(timer));
-        const who = r.speaker || '未知';
         const txt = r.text || '';
-        await runWakeStyleAssistantAfterAsr(txt, who, sessionId, meetingSessionId);
+        const trimmed = (txt || '').trim();
+        const inp = $('chatInput');
+        if (trimmed && inp) {
+          inp.value = trimmed;
+          inp.focus();
+          try { inp.setSelectionRange(trimmed.length, trimmed.length); } catch (_) {}
+          toast('已填入输入框，可编辑后点发送', 2400);
+        } else {
+          toast('未识别到清晰语音，请再试一次', 3200);
+        }
       } catch (e) {
         const msg = (e && (e.name === 'AbortError' || /abort/i.test(e.message || ''))) ? '识别超时' :
           ('识别失败：' + (e && e.message ? e.message : '未知错误'));
@@ -3723,6 +3757,7 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
     // 8) 设置抽屉：服务状态 / 阈值 / 声纹注册 / 唤醒阈值 / VAD
     // ═══════════════════════════════════════════════════
     function openDrawer() {
+      setThemePopoverOpen(false);
       $('drawer').classList.add('show');
       $('drawerOverlay').classList.add('show');
       refreshHealth();
@@ -4748,14 +4783,42 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
         btn.setAttribute('aria-pressed', bid === id ? 'true' : 'false');
       });
     }
+    function setThemePopoverOpen(open) {
+      const pop = $('themePopover');
+      const btn = $('btnThemeUi');
+      if (!pop || !btn) return;
+      if (open) pop.removeAttribute('hidden');
+      else pop.setAttribute('hidden', '');
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      btn.classList.toggle('active', !!open);
+    }
     function initUiTheme() {
       let saved = 'aurora';
       try { saved = localStorage.getItem(THEME_STORAGE_KEY) || 'aurora'; } catch (_) {}
       if (!THEME_IDS.includes(saved)) saved = 'aurora';
       applyUiTheme(saved);
+      const wrap = document.querySelector('.theme-popover-wrap');
+      const btnTheme = $('btnThemeUi');
+      if (btnTheme) {
+        btnTheme.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const pop = $('themePopover');
+          if (!pop) return;
+          setThemePopoverOpen(pop.hasAttribute('hidden'));
+        });
+      }
+      document.addEventListener('click', (e) => {
+        if (!wrap || wrap.contains(e.target)) return;
+        const pop = $('themePopover');
+        if (pop && !pop.hasAttribute('hidden')) setThemePopoverOpen(false);
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') setThemePopoverOpen(false);
+      });
       document.querySelectorAll('.theme-pill').forEach((btn) => {
         btn.addEventListener('click', () => {
           applyUiTheme(btn.getAttribute('data-theme-id') || 'aurora');
+          setThemePopoverOpen(false);
         });
       });
     }
