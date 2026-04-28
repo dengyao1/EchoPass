@@ -130,6 +130,8 @@
 
     /* ======== 顶部栏：胶囊 pill ======== */
     .header {
+      position: relative;
+      z-index: 80;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -219,6 +221,8 @@
 
     /* ======== 主区（三栏：音频 / 中部 Tab / AI 问答） ======== */
     .main {
+      position: relative;
+      z-index: 1;
       display: grid;
       grid-template-columns: 320px minmax(0, 1fr) 340px;
       gap: 14px;
@@ -1385,7 +1389,7 @@
       position: absolute;
       right: 0;
       top: calc(100% + 10px);
-      z-index: 500;
+      z-index: 120;
       width: min(300px, calc(100vw - 28px));
       padding: 0.85rem 0.95rem 0.95rem;
       border-radius: 16px;
@@ -1531,8 +1535,8 @@
       --bg: #f4f0e8; --bg-2: #ebe4d8;
       --panel: rgba(255, 255, 255, 0.75); --panel-soft: rgba(255, 255, 255, 0.55);
       --panel-strong: rgba(0, 0, 0, 0.06);
-      --border: rgba(0, 0, 0, 0.1); --border-strong: rgba(0, 0, 0, 0.16);
-      --text: #151821; --text-sub: #2a3142; --muted: #5c6470;
+      --border: rgba(0, 0, 0, 0.12); --border-strong: rgba(0, 0, 0, 0.2);
+      --text: #0f172a; --text-sub: #1e293b; --muted: #475569;
       --cyan: #0f766e; --violet: #4f46e5; --pink: #be185d; --gold: #b45309; --green: #166534;
       --accent: #4f46e5; --accent-2: #0d9488; --accent-soft: rgba(79, 70, 229, 0.12);
       --accent-bubble: linear-gradient(135deg, #0d9488 0%, #4f46e5 50%, #a21caf 100%);
@@ -1592,6 +1596,109 @@
     }
     html[data-theme="paper"] .col-header { border-bottom-color: var(--border); }
     html[data-theme="paper"] .col-header h2 { color: var(--text); }
+    html[data-theme="paper"] .col-header .hint { color: var(--muted); }
+    html[data-theme="paper"] .brand-name {
+      background: linear-gradient(135deg, #0f172a 0%, #4338ca 42%, #0f766e 88%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    html[data-theme="paper"] .header-title .date {
+      background: none !important;
+      -webkit-text-fill-color: var(--text-sub);
+      color: var(--text-sub);
+    }
+    html[data-theme="paper"] .header-title .date .tag {
+      color: var(--muted);
+      -webkit-text-fill-color: var(--muted);
+    }
+    html[data-theme="paper"] .save-status,
+    html[data-theme="paper"] .save-status .label { color: var(--muted); }
+    html[data-theme="paper"] .tab-bar { border-bottom-color: var(--border); }
+    html[data-theme="paper"] .tab-btn { color: var(--muted); }
+    html[data-theme="paper"] .tab-btn:hover { color: var(--text); }
+    html[data-theme="paper"] .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    html[data-theme="paper"] .transcript-empty,
+    html[data-theme="paper"] .summary-placeholder,
+    html[data-theme="paper"] .timeline-empty {
+      color: var(--text-sub);
+    }
+    html[data-theme="paper"] .audio-panel { border-bottom-color: var(--border); }
+    html[data-theme="paper"] .audio-times { color: var(--muted); }
+    html[data-theme="paper"] .waveform-empty { color: var(--muted); }
+    html[data-theme="paper"] .audio-progress .track { background: rgba(15, 23, 42, 0.1); }
+    html[data-theme="paper"] .waveform-wrap canvas {
+      background: linear-gradient(180deg, rgba(15, 23, 42, 0.05), rgba(15, 23, 42, 0.02));
+    }
+    html[data-theme="paper"] .audio-btn:hover {
+      color: var(--text);
+      border-color: rgba(13, 148, 136, 0.45);
+      box-shadow: 0 0 12px rgba(79, 70, 229, 0.15);
+    }
+    html[data-theme="paper"] .chat-scope {
+      color: var(--text-sub);
+      border-bottom-color: var(--border);
+    }
+    html[data-theme="paper"] .chat-scope .tag-inline {
+      color: #3730a3;
+      border-color: rgba(67, 56, 202, 0.42);
+      background: rgba(79, 70, 229, 0.1);
+    }
+    html[data-theme="paper"] .chat-chip {
+      color: #312e81;
+      border-color: rgba(79, 70, 229, 0.38);
+      background: rgba(79, 70, 229, 0.1);
+    }
+    html[data-theme="paper"] .chat-chip:hover {
+      color: #1e1b4b;
+      border-color: rgba(13, 148, 136, 0.45);
+      background: rgba(79, 70, 229, 0.16);
+      box-shadow: 0 2px 12px rgba(79, 70, 229, 0.12);
+    }
+    html[data-theme="paper"] .chat-msg.bot .bubble-box {
+      border-color: var(--border);
+      background: rgba(255, 255, 255, 0.92);
+      color: var(--text-sub);
+    }
+    html[data-theme="paper"] .chat-msg.bot.typing .bubble-box { color: var(--muted); }
+    html[data-theme="paper"] .chat-msg.bot .who { color: var(--muted); }
+    html[data-theme="paper"] .chat-msg.user .who { color: #0f766e; }
+    html[data-theme="paper"] .chat-input-bar { border-top-color: var(--border); }
+    html[data-theme="paper"] .chat-input-bar .options,
+    html[data-theme="paper"] .chat-input-bar .chat-wake-hint {
+      color: var(--text-sub);
+      opacity: 1;
+    }
+    html[data-theme="paper"] .chat-input-bar .chat-mic-btn:hover { color: var(--text); }
+    html[data-theme="paper"] .summary-toolbar,
+    html[data-theme="paper"] .summary-toolbar button,
+    html[data-theme="paper"] #summaryLastRefresh {
+      color: var(--muted);
+    }
+    html[data-theme="paper"] .summary-toolbar button:hover {
+      color: var(--text);
+      border-color: rgba(79, 70, 229, 0.35);
+    }
+    html[data-theme="paper"] .donut-center .total { color: var(--text); }
+    html[data-theme="paper"] .donut-center .hint { color: var(--muted); }
+    html[data-theme="paper"] .speaker-bar .name { color: var(--text); }
+    html[data-theme="paper"] .speaker-bar .avatar { color: #fff; }
+    html[data-theme="paper"] .timeline-item .ti-name { color: var(--text); }
+    html[data-theme="paper"] .timeline-item:hover {
+      background: rgba(79, 70, 229, 0.06);
+      border-color: var(--border);
+    }
+    html[data-theme="paper"] .chapter-card .title { color: var(--text); }
+    html[data-theme="paper"] .chapter-card .summary {
+      color: var(--text-sub);
+    }
+    html[data-theme="paper"] .report-hero .h-title,
+    html[data-theme="paper"] .report-module .m-title,
+    html[data-theme="paper"] .report-table td:first-child,
+    html[data-theme="paper"] .report-actions .item .task {
+      color: var(--text);
+    }
 
     .hidden { display: none !important; }
   </style>
