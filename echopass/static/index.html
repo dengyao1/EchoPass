@@ -2008,6 +2008,25 @@
           <button class="btn" id="btnRefreshHealth">刷新</button>
           <span id="wsState" style="color:var(--muted);font-size:0.78rem;">WS：未连接</span>
         </div>
+        <div style="margin-top:0.4rem;font-size:0.72rem;color:var(--muted);">
+          会议 ID：<code id="liveSessionIdLabel" style="user-select:all;color:var(--text-sub);">—</code>
+        </div>
+      </section>
+
+      <section class="drawer-section">
+        <h3>本场会议参与者</h3>
+        <div style="font-size:0.74rem;color:var(--muted);margin-bottom:0.4rem;">
+          多浏览器并发开会时，每个浏览器只识别自己勾选的人。留空 = 不过滤（按全库匹配）。
+        </div>
+        <div class="tag-row" id="participantsList" style="min-height:1.6rem;display:flex;flex-wrap:wrap;gap:0.35rem;"></div>
+        <div class="row" style="margin-top:0.5rem;">
+          <button class="btn" id="btnParticipantsSelectAll" type="button">全选</button>
+          <button class="btn" id="btnParticipantsClear" type="button">清空</button>
+          <button class="btn primary" id="btnParticipantsSave" type="button">保存到本场会议</button>
+        </div>
+        <div id="participantsHint" style="margin-top:0.45rem;font-size:0.72rem;color:var(--muted);">
+          已选 <span id="participantsSelCount">0</span> / 共享库 <span id="participantsTotalCount">0</span>
+        </div>
       </section>
 
       <section class="drawer-section">
@@ -2386,7 +2405,8 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
 
       // 实时识别
       transcriptLines: [],
-      liveSessionId: 'default',
+      // 页面加载时立即生成；多浏览器并发开会时各自独立。
+      liveSessionId: ('sess_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)),
       liveRunning: false,
       livePaused: false,
       liveSubCb: null,
@@ -2777,8 +2797,8 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
     async function startLive() {
       if (state.liveRunning) return;
       try {
-        // 重置状态
-        state.liveSessionId = 'sess_' + Date.now();
+        // session_id 在页面加载时已生成（一个浏览器标签 = 一场会议）；
+        // 这里只重置该 session 在后端的 ASR/转录/纪要状态，不再换 ID。
         state.transcriptLines = [];
         state.liveBuf = []; state.liveTail = null;
         state.silenceFrames = 0; state.currentPartial = '';
@@ -2801,6 +2821,17 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
         renderChapters();
         updateHeaderDate();
         await api('/api/asr_reset?session_id=' + encodeURIComponent(state.liveSessionId), { method: 'POST' }).catch(() => {});
+        // 把当前已选的「本场会议参与者」同步到本会议白名单（哪怕为空也写一遍，便于后端知道）
+        try {
+          await api('/api/meeting/participants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              session_id: state.liveSessionId,
+              names: Array.from(participantsSelected || []),
+            }),
+          });
+        } catch (_) { /* 列表为空或后端拒收都不阻塞开会 */ }
 
         // 整场录音轨：与 ASR 并行；每帧驱动波形重绘
         await recTrack.start(() => { drawWaveform(); });
@@ -3093,7 +3124,7 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
     let wakeSubCb = null;
     let wakeRing = null, wakeRingCap = 0, wakeRingPos = 0, wakeRingFull = false;
     let wakeRunning = false;
-    let wakeSessionId = 'wake_default';
+    let wakeSessionId = 'wake_' + (state.liveSessionId || 'default');
     let wakePhase = 'IDLE'; // IDLE | MONITORING | WOKEN | LISTENING | RECOGNIZING
     let wakeListenBuf = [], wakeListenTimer = null, wakeSilenceFrames = 0;
     let wakeListenStartTs = 0;
@@ -3874,7 +3905,7 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
             }
           }
         });
-        wakeSessionId = 'wake_' + Date.now();
+        wakeSessionId = 'wake_' + (state.liveSessionId || ('default_' + Date.now()));
         wakeRunning = true; wakePhase = 'MONITORING';
         wakeInitRing(sharedMic.sampleRate);
         startKwsPoll();
@@ -3904,6 +3935,9 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       $('drawerOverlay').classList.add('show');
       refreshHealth();
       refreshSpeakers();
+      refreshParticipants();
+      const idLabel = $('liveSessionIdLabel');
+      if (idLabel) idLabel.textContent = state.liveSessionId || '—';
     }
     function closeDrawer() {
       $('drawer').classList.remove('show');
@@ -3971,8 +4005,93 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
         el.textContent = '错误：' + e.message;
       }
     }
-    $('btnRefreshHealth').onclick = () => { refreshHealth(); refreshSpeakers(); };
-    $('btnSpeakersRefresh').onclick = () => { refreshSpeakers(); };
+    $('btnRefreshHealth').onclick = () => { refreshHealth(); refreshSpeakers(); refreshParticipants(); };
+    $('btnSpeakersRefresh').onclick = () => { refreshSpeakers(); refreshParticipants(); };
+
+    /** 「本场会议参与者」白名单 UI */
+    let participantsAll = [];
+    let participantsSelected = new Set();
+    function renderParticipantsUI() {
+      const el = $('participantsList');
+      const selCount = $('participantsSelCount');
+      const totalCount = $('participantsTotalCount');
+      if (totalCount) totalCount.textContent = String(participantsAll.length);
+      if (selCount) selCount.textContent = String(participantsSelected.size);
+      if (!el) return;
+      if (!participantsAll.length) {
+        el.innerHTML = '<span style="color:var(--muted);font-size:0.8rem;">（共享声纹库为空，请先到下方「声纹识别」注册）</span>';
+        return;
+      }
+      el.innerHTML = participantsAll.map((n) => {
+        const on = participantsSelected.has(n);
+        const cls = 'tag participant-tag' + (on ? ' on' : '');
+        return '<button type="button" class="' + cls + '" data-name="'
+          + encodeURIComponent(n) + '" style="cursor:pointer;'
+          + (on ? 'background:linear-gradient(135deg, rgba(122,92,255,0.35), rgba(61,246,255,0.25));border-color:rgba(122,92,255,0.55);' : '')
+          + '">' + (on ? '✓ ' : '') + escHtml(n) + '</button>';
+      }).join('');
+      el.querySelectorAll('button[data-name]').forEach((b) => {
+        b.onclick = () => {
+          const nm = decodeURIComponent(b.getAttribute('data-name'));
+          if (participantsSelected.has(nm)) participantsSelected.delete(nm);
+          else participantsSelected.add(nm);
+          renderParticipantsUI();
+        };
+      });
+    }
+    async function refreshParticipants() {
+      const sid = state.liveSessionId;
+      try {
+        const { speakers } = await api('/api/speakers');
+        participantsAll = Array.isArray(speakers) ? speakers.slice() : [];
+        if (sid && sid !== 'default') {
+          try {
+            const r = await api('/api/meeting/participants?session_id=' + encodeURIComponent(sid));
+            participantsSelected = new Set(Array.isArray(r.names) ? r.names : []);
+          } catch (_) {
+            participantsSelected = new Set();
+          }
+        } else {
+          participantsSelected = new Set();
+        }
+        renderParticipantsUI();
+      } catch (e) {
+        const el = $('participantsList');
+        if (el) el.innerHTML = '<span style="color:var(--muted);font-size:0.8rem;">读取失败：' + escHtml(e.message || '') + '</span>';
+      }
+    }
+    $('btnParticipantsSelectAll').onclick = () => {
+      participantsSelected = new Set(participantsAll);
+      renderParticipantsUI();
+    };
+    $('btnParticipantsClear').onclick = () => {
+      participantsSelected = new Set();
+      renderParticipantsUI();
+    };
+    $('btnParticipantsSave').onclick = async () => {
+      const sid = state.liveSessionId;
+      if (!sid || sid === 'default') {
+        toast('当前没有有效的会议 ID');
+        return;
+      }
+      try {
+        const r = await api('/api/meeting/participants', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sid, names: Array.from(participantsSelected) }),
+        });
+        const ignored = (r && Array.isArray(r.ignored)) ? r.ignored : [];
+        toast(
+          (participantsSelected.size === 0
+            ? '已清空白名单（本场不过滤声纹）'
+            : '已保存：' + (r.names || []).length + ' 人参会')
+          + (ignored.length ? '；忽略未注册：' + ignored.join(',') : ''),
+          3200
+        );
+      } catch (e) {
+        toast('保存失败：' + (e && e.message ? e.message : '未知错误'), 3500);
+      }
+    };
 
     // 阈值滑杆
     $('settingThreshold').oninput = (e) => {
@@ -4068,7 +4187,7 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
         $('enrollOut').style.display = 'block';
         $('enrollOut').textContent = JSON.stringify(r, null, 2);
         $('enrollRecState').textContent = '已注册';
-        await refreshSpeakers(); await refreshHealth();
+        await refreshSpeakers(); await refreshHealth(); await refreshParticipants();
       } catch (e) {
         $('enrollRecState').textContent = '失败：' + e.message;
       }
@@ -4084,7 +4203,7 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
         const r = await api('/api/enroll', { method: 'POST', body: fd });
         $('enrollOut').style.display = 'block';
         $('enrollOut').textContent = JSON.stringify(r, null, 2);
-        await refreshSpeakers(); await refreshHealth();
+        await refreshSpeakers(); await refreshHealth(); await refreshParticipants();
         toast('已注册 ' + name);
       } catch (e) { toast('失败：' + e.message); }
     };
@@ -4094,8 +4213,9 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
     // ═══════════════════════════════════════════════════
     function connectWs() {
       const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
-      state.wsCtl = new WebSocket(proto + location.host + '/ws/control?session_id=global');
-      state.wsCtl.onopen = () => { $('wsState').textContent = 'WS：已连接'; };
+      const sid = state.liveSessionId || ('sess_' + Date.now());
+      state.wsCtl = new WebSocket(proto + location.host + '/ws/control?session_id=' + encodeURIComponent(sid));
+      state.wsCtl.onopen = () => { $('wsState').textContent = 'WS：已连接 · ' + sid; };
       state.wsCtl.onclose = () => {
         $('wsState').textContent = 'WS：已断开，重连中…';
         setTimeout(connectWs, 1500);
@@ -4936,6 +5056,7 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       startSummaryTicker();
       refreshHealth();
       refreshSpeakers();
+      refreshParticipants();
       connectWs();
       initCursorGlow();
     }

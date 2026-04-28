@@ -148,8 +148,10 @@ from echopass.engine import (
 )
 from echopass.agent.dialogue_manager import DialogueManager
 from echopass.agent.llm_client import LLMChatClient
+from echopass.agent.participants import ParticipantsRegistry
 from echopass.meeting.summarizer import MeetingSummarizer
 from echopass.meeting.transcript_buffer import TranscriptBuffer
+from echopass.session.manager import SessionManager
 from echopass.transport.schemas import event_message
 from echopass.transport.websocket_server import WebSocketHub
 from echopass.config import cfg, config_path, to_bool
@@ -313,6 +315,24 @@ _wake_ack_audio = _safe_wake_ack_audio_path(
 dialogue_manager = DialogueManager(ttl_sec=_assistant_ttl_sec)
 meeting_summarizer = MeetingSummarizer(llm_chat_client=llm_chat)
 
+# 多会议并发：每个浏览器/标签页用唯一 session_id，由 SessionManager 维护元信息
+# session.ttl_sec：长时间无心跳/调用即清理；建议比 assistant.ttl_sec 大一档
+_SESSION_TTL_SEC = cfg("session.ttl_sec", "SPEAKER_SESSION_TTL_SEC", 60 * 60 * 4, int)
+session_manager = SessionManager(ttl_sec=_SESSION_TTL_SEC)
+# 会议参与者白名单（按 session_id），声纹库本身全局共享，但识别可只匹配白名单
+participants_registry = ParticipantsRegistry()
+
+
+def _normalize_session_id(session_id: Optional[str], *, fallback: str = "default") -> str:
+    """收口 session_id：去空白；不传或空字符串退回 fallback（保留 default 兼容）。"""
+    sid = (session_id or "").strip()
+    return sid or fallback
+
+
+def _touch_session(session_id: str) -> None:
+    if session_id and session_id != "default":
+        session_manager.touch(session_id)
+
 app = FastAPI(title="EchoPass 实时语音会议助手", version="1.0")
 app.add_middleware(
     CORSMiddleware,
@@ -410,6 +430,20 @@ class MeetingChaptersRequest(BaseModel):
     session_id: str = "default"
 
 
+class ParticipantsSetRequest(BaseModel):
+    session_id: str
+    names: List[str] = []
+
+
+class SessionStartRequest(BaseModel):
+    session_id: str
+    label: Optional[str] = None
+
+
+class SessionStopRequest(BaseModel):
+    session_id: str
+
+
 async def emit_event(event_type: str, session_id: str = "default", payload: Optional[Dict[str, Any]] = None) -> None:
     await ws_hub.emit(event_message(event_type=event_type, session_id=session_id, payload=payload or {}), session_id=session_id)
 
@@ -456,6 +490,31 @@ def _flush_volc_stream_tts_buf(buf: str) -> Tuple[List[str], str]:
             continue
         break
     return [s for s in segs if s], rest
+
+
+def _apply_participants_filter(
+    session_id: str,
+    spk: Optional[str],
+    best: float,
+    scores: List[Tuple[str, float]],
+    threshold: float,
+) -> Tuple[Optional[str], float, List[Tuple[str, float]]]:
+    """按会议白名单过滤识别结果。
+
+    - 白名单为空 → 维持原值。
+    - 白名单非空 → ``scores`` 只保留白名单内的条目；从剩余里挑最高分作为 ``spk``，
+      高于 ``threshold`` 才返回，否则 ``spk=None``。
+    """
+    wl = participants_registry.get(session_id)
+    if not wl:
+        return spk, float(best), scores
+    filtered = [(n, float(s)) for (n, s) in scores if n in wl]
+    if not filtered:
+        return None, 0.0, []
+    filtered.sort(key=lambda x: -x[1])
+    top_name, top_score = filtered[0]
+    new_spk = top_name if top_score >= float(threshold) else None
+    return new_spk, top_score, filtered
 
 
 def _build_meeting_context(session_id: str) -> str:
@@ -507,38 +566,50 @@ def health():
 
 
 @app.websocket("/ws/control")
-async def ws_control(websocket: WebSocket, session_id: str = "global"):
-    await ws_hub.connect(websocket, session_id=session_id)
+async def ws_control(websocket: WebSocket, session_id: str = "default"):
+    """会议级 WS：每个浏览器/标签页用唯一 session_id 连接。
+
+    旧客户端可能仍传 ``global`` 作为运维频道；服务端依旧接受，但所有 ``emit_event``
+    都按真实业务 session_id 广播，``global`` 仅作可选 admin 监听通道。
+    """
+    sid = _normalize_session_id(session_id, fallback="default")
+    await ws_hub.connect(websocket, session_id=sid)
+    if sid not in ("default", "global"):
+        try:
+            session_manager.start(sid)
+        except Exception:  # noqa: BLE001
+            logger.exception("session_manager.start failed for sid=%s", sid)
     # 注意：send_json 也要包在 try 里。客户端在握手完成后立刻关页/刷新/掉网，
     # 首帧 send 就会抛 WebSocketDisconnect(code=1006)；不捕的话会冒成红色 ERROR。
     try:
         await websocket.send_json(
             event_message(
                 event_type="ws_connected",
-                session_id=session_id,
-                payload={"assistant_active": dialogue_manager.is_active(session_id)},
+                session_id=sid,
+                payload={"assistant_active": dialogue_manager.is_active(sid)},
             )
         )
         while True:
             msg = await websocket.receive_json()
             cmd = str(msg.get("command", "")).strip().lower()
             if cmd == "ping":
-                await websocket.send_json(event_message("pong", session_id=session_id, payload={"ok": True}))
+                _touch_session(sid)
+                await websocket.send_json(event_message("pong", session_id=sid, payload={"ok": True}))
             elif cmd == "assistant_stop":
-                dialogue_manager.stop(session_id)
-                await emit_event("assistant_session_stopped", session_id, {"source": "ws_command"})
+                dialogue_manager.stop(sid)
+                await emit_event("assistant_session_stopped", sid, {"source": "ws_command"})
             elif cmd == "meeting_summary_requested":
-                await emit_event("meeting_summary_requested", session_id, {"source": "ws_command"})
+                await emit_event("meeting_summary_requested", sid, {"source": "ws_command"})
             else:
-                await websocket.send_json(event_message("ws_unknown_command", session_id=session_id, payload={"command": cmd}))
+                await websocket.send_json(event_message("ws_unknown_command", session_id=sid, payload={"command": cmd}))
     except WebSocketDisconnect:
         # 客户端正常断开（关页/刷新/网络抖断），属预期行为，不打日志
         pass
     except Exception:  # noqa: BLE001
         # 非预期异常才上报，仍走 finally 做清理
-        logger.exception("/ws/control 未预期异常 session_id=%s", session_id)
+        logger.exception("/ws/control 未预期异常 session_id=%s", sid)
     finally:
-        await ws_hub.disconnect(websocket, session_id=session_id)
+        await ws_hub.disconnect(websocket, session_id=sid)
 
 
 @app.get("/api/speakers")
@@ -570,6 +641,7 @@ async def enroll(
 async def identify_file(
     audio: UploadFile = File(...),
     threshold: Optional[float] = None,
+    session_id: Optional[str] = None,
 ):
     th = threshold if threshold is not None else SIM_THRESHOLD
     raw = await audio.read()
@@ -581,6 +653,8 @@ async def identify_file(
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     spk, best, scores = engine.identify(emb, th)
+    sid = _normalize_session_id(session_id)
+    spk, best, scores = _apply_participants_filter(sid, spk, best, scores, th)
     score_items = [ScoreItem(name=n, score=s) for n, s in scores]
     return IdentifyResponse(
         speaker=spk,
@@ -596,6 +670,7 @@ async def identify_pcm(
     request: Request,
     sample_rate: int,
     threshold: Optional[float] = None,
+    session_id: Optional[str] = None,
 ):
     """原始 float32 小端 PCM，单声道；sample_rate 为浏览器 AudioContext 采样率（常见 48000）。"""
     th = threshold if threshold is not None else SIM_THRESHOLD
@@ -610,6 +685,8 @@ async def identify_pcm(
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     spk, best, scores = engine.identify(emb, th)
+    sid = _normalize_session_id(session_id)
+    spk, best, scores = _apply_participants_filter(sid, spk, best, scores, th)
     score_items = [ScoreItem(name=n, score=s) for n, s in scores]
     return IdentifyResponse(
         speaker=spk,
@@ -638,11 +715,13 @@ async def recognize_pcm(
     if len(body) % 4 != 0:
         raise HTTPException(400, "PCM 长度须为 4 的倍数（float32）")
     pcm = np.frombuffer(body, dtype=np.float32)
+    sid = _normalize_session_id(session_id)
+    _touch_session(sid)
     # 本段音频时长（按请求里的 sample_rate 折算；与重采样无关）
     duration_sec = float(pcm.size) / float(sample_rate) if sample_rate > 0 else 0.0
     start_ms = int(offset_ms or 0)
     end_ms = int(start_ms + round(duration_sec * 1000))
-    await emit_event("audio_chunk_received", session_id=session_id, payload={"sample_rate": sample_rate, "samples": int(pcm.size), "is_final": bool(is_final)})
+    await emit_event("audio_chunk_received", session_id=sid, payload={"sample_rate": sample_rate, "samples": int(pcm.size), "is_final": bool(is_final)})
 
     # 说话人识别
     try:
@@ -650,6 +729,7 @@ async def recognize_pcm(
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     spk, best, scores = engine.identify(emb, th)
+    spk, best, scores = _apply_participants_filter(sid, spk, best, scores, th)
     score_items = [ScoreItem(name=n, score=s) for n, s in scores]
 
     # ASR：先重采样到 16kHz（前端 AudioWorklet 已 16k，则是 no-op）
@@ -658,11 +738,11 @@ async def recognize_pcm(
         wav_t = torchaudio.functional.resample(wav_t, sample_rate, 16000)
     pcm_16k = wav_t.numpy()
     hw = (hotword or _asr_hotword_env or "").strip() or None
-    text_raw = asr_engine.transcribe_chunk(pcm_16k, session_id, is_final=is_final, hotword=hw)
+    text_raw = asr_engine.transcribe_chunk(pcm_16k, sid, is_final=is_final, hotword=hw)
     if text_raw.strip():
         logger.info(
             "ASR [%s] speaker=%s score=%.3f hotword=%s text=%s",
-            session_id, spk or "未知", float(best), (hw or "-"), text_raw.strip(),
+            sid, spk or "未知", float(best), (hw or "-"), text_raw.strip(),
         )
 
     # LLM 纠错（可选）
@@ -679,7 +759,7 @@ async def recognize_pcm(
 
     if text_final.strip():
         transcript_buffer.append(
-            session_id=session_id,
+            session_id=sid,
             speaker=spk or "未知说话人",
             text=text_final,
             text_raw=text_raw,
@@ -690,7 +770,7 @@ async def recognize_pcm(
         )
         await emit_event(
             "asr_final" if is_final else "asr_interim",
-            session_id=session_id,
+            session_id=sid,
             payload={
                 "speaker": spk or "未知说话人",
                 "text": text_final,
@@ -720,18 +800,29 @@ async def recognize_pcm(
 
 @app.post("/api/asr_reset")
 def asr_reset(session_id: str = "default"):
-    """重置 ASR 流式 session（开始新一轮对话时调用）。"""
-    asr_engine.reset_session(session_id)
-    transcript_buffer.clear(session_id)
-    dialogue_manager.stop(session_id)
-    # 同一会话 id 的会中助手多轮记忆一并清空（与前端 chat_ 前缀 id 均尝试）
-    _assistant_history_clear_session_ids(session_id, f"chat_{session_id}")
+    """重置 ASR 流式 session（开始新一轮对话时调用）。
+
+    同一场会议在录音/暂停切换时会反复 reset，因此 **不** 在这里清空参与者白名单；
+    白名单生命周期跟随 ``session_manager.stop`` 或 ``/api/meeting/sessions/stop``。
+    """
+    sid = _normalize_session_id(session_id)
+    asr_engine.reset_session(sid)
+    transcript_buffer.clear(sid)
+    dialogue_manager.stop(sid)
+    dialogue_manager.stop(f"wake_{sid}")
+    _assistant_history_clear_session_ids(
+        sid, f"chat_{sid}", f"wake_{sid}",
+    )
+    if sid != "default":
+        session_manager.touch(sid)
     return {"ok": True}
 
 
 @app.post("/api/kws")
 async def kws(request: Request, sample_rate: int, session_id: str = "default"):
     """关键词唤醒检测。Body 为 float32 小端单声道 PCM。"""
+    sid = _normalize_session_id(session_id)
+    _touch_session(sid)
     body = await request.body()
     if len(body) < 256 or len(body) % 4 != 0:
         return {
@@ -749,10 +840,10 @@ async def kws(request: Request, sample_rate: int, session_id: str = "default"):
         pcm = wav_t.numpy()
     triggered, score, raw = kws_engine.detect(pcm)
     if triggered:
-        logger.info("KWS [%s] triggered keywords=%s score=%.3f", session_id, _kws_keywords, float(score) if score is not None else -1.0)
-        dialogue_manager.start(session_id)
-        await emit_event("wakeword_detected", session_id=session_id, payload={"score": score, "keywords": _kws_keywords})
-        await emit_event("assistant_session_started", session_id=session_id, payload={"ttl_sec": _assistant_ttl_sec})
+        logger.info("KWS [%s] triggered keywords=%s score=%.3f", sid, _kws_keywords, float(score) if score is not None else -1.0)
+        dialogue_manager.start(sid)
+        await emit_event("wakeword_detected", session_id=sid, payload={"score": score, "keywords": _kws_keywords})
+        await emit_event("assistant_session_started", session_id=sid, payload={"ttl_sec": _assistant_ttl_sec})
     return {
         "kws_enabled": _kws_enabled,
         "triggered": triggered,
@@ -799,7 +890,8 @@ async def tts_proxy(request: Request):
 
     body = await request.json()
     text = body.get("text", "").strip()
-    session_id = str(body.get("session_id", "default"))
+    session_id = _normalize_session_id(str(body.get("session_id", "default")))
+    _touch_session(session_id)
     if not text:
         raise HTTPException(400, "text 不能为空")
     voice = body.get("voice", _tts_voice)
@@ -915,11 +1007,14 @@ async def assistant_reply(req: AssistantReplyRequest):
     text = req.text.strip()
     if not text:
         raise HTTPException(400, "text 不能为空")
-    if not dialogue_manager.is_active(req.session_id):
-        dialogue_manager.start(req.session_id)
-        await emit_event("assistant_session_started", req.session_id, {"source": "api_assistant_reply"})
+    sid = _normalize_session_id(req.session_id)
+    req.session_id = sid
+    _touch_session(sid)
+    if not dialogue_manager.is_active(sid):
+        dialogue_manager.start(sid)
+        await emit_event("assistant_session_started", sid, {"source": "api_assistant_reply"})
     else:
-        dialogue_manager.touch(req.session_id)
+        dialogue_manager.touch(sid)
 
     # 会议上下文：优先取实时识别的 session，回退到 wake 自己的 session。
     meeting_sid = (req.meeting_session_id or "").strip() or req.session_id
@@ -963,13 +1058,16 @@ async def assistant_stream(req: AssistantReplyRequest):
     text = req.text.strip()
     if not text:
         raise HTTPException(400, "text 不能为空")
-    if not dialogue_manager.is_active(req.session_id):
-        dialogue_manager.start(req.session_id)
+    sid = _normalize_session_id(req.session_id)
+    req.session_id = sid
+    _touch_session(sid)
+    if not dialogue_manager.is_active(sid):
+        dialogue_manager.start(sid)
         await emit_event(
-            "assistant_session_started", req.session_id, {"source": "api_assistant_stream"},
+            "assistant_session_started", sid, {"source": "api_assistant_stream"},
         )
     else:
-        dialogue_manager.touch(req.session_id)
+        dialogue_manager.touch(sid)
 
     meeting_sid = (req.meeting_session_id or "").strip() or req.session_id
     meeting_ctx = _build_meeting_context(meeting_sid)
@@ -1168,16 +1266,20 @@ async def assistant_stream(req: AssistantReplyRequest):
 
 @app.post("/api/meeting/summary")
 async def meeting_summary(req: MeetingSummaryRequest):
-    await emit_event("meeting_summary_requested", req.session_id, {"title": req.title})
-    items = transcript_buffer.list_items(req.session_id)
+    sid = _normalize_session_id(req.session_id)
+    _touch_session(sid)
+    await emit_event("meeting_summary_requested", sid, {"title": req.title})
+    items = transcript_buffer.list_items(sid)
     summary = await meeting_summarizer.summarize(items, title=req.title)
-    await emit_event("meeting_summary_ready", req.session_id, {"title": summary.get("title", req.title)})
+    await emit_event("meeting_summary_ready", sid, {"title": summary.get("title", req.title)})
     return summary
 
 
 @app.get("/api/meeting/transcript")
 def meeting_transcript(session_id: str = "default"):
-    return {"session_id": session_id, "items": transcript_buffer.list_dicts(session_id)}
+    sid = _normalize_session_id(session_id)
+    _touch_session(sid)
+    return {"session_id": sid, "items": transcript_buffer.list_dicts(sid)}
 
 
 @app.post("/api/meeting/chapters")
@@ -1186,10 +1288,12 @@ async def meeting_chapters(req: MeetingChaptersRequest):
 
     返回 {"session_id": ..., "generated_at": iso8601, "chapters": [...]}.
     """
-    items = transcript_buffer.list_items(req.session_id)
+    sid = _normalize_session_id(req.session_id)
+    _touch_session(sid)
+    items = transcript_buffer.list_items(sid)
     chapters = await meeting_summarizer.chapters(items)
     return {
-        "session_id": req.session_id,
+        "session_id": sid,
         "generated_at": _dt.datetime.utcnow().isoformat() + "Z",
         "chapters": chapters,
     }
@@ -1346,6 +1450,8 @@ async def meeting_export(
     session_id: str = Form("default"),
 ):
     """把原始音频 / 转录 / 纪要打包成 ZIP 供用户下载。"""
+    session_id = _normalize_session_id(session_id)
+    _touch_session(session_id)
     audio_bytes = await audio.read()
     if not audio_bytes or len(audio_bytes) < 44:
         raise HTTPException(400, "音频为空或长度异常，请确认已完成录音")
@@ -1421,6 +1527,92 @@ async def meeting_export(
         media_type="application/zip",
         headers={"Content-Disposition": disposition},
     )
+
+
+@app.get("/api/meeting/participants")
+def get_meeting_participants(session_id: str):
+    """获取本场会议的参与者白名单（声纹库筛选用）。空数组表示不过滤。"""
+    sid = _normalize_session_id(session_id)
+    if sid == "default":
+        raise HTTPException(400, "session_id 不能为空或 default")
+    _touch_session(sid)
+    return {
+        "session_id": sid,
+        "names": participants_registry.list(sid),
+        "all_speakers": engine.list_speakers(),
+    }
+
+
+@app.post("/api/meeting/participants")
+def set_meeting_participants(req: ParticipantsSetRequest):
+    """设置本场会议的参与者白名单。``names`` 为空 => 等同于不过滤。"""
+    sid = _normalize_session_id(req.session_id)
+    if sid == "default":
+        raise HTTPException(400, "session_id 不能为空或 default")
+    _touch_session(sid)
+    if sid not in (s.session_id for s in session_manager.list()):
+        session_manager.start(sid)
+    all_known = set(engine.list_speakers())
+    incoming = [str(n).strip() for n in (req.names or []) if str(n).strip()]
+    unknown = [n for n in incoming if n not in all_known]
+    accepted = [n for n in incoming if n in all_known]
+    participants_registry.set(sid, accepted)
+    sess = session_manager.get(sid)
+    if sess is not None:
+        sess.participants = set(accepted)
+    return {
+        "session_id": sid,
+        "names": sorted(accepted),
+        "ignored": sorted(unknown),
+        "all_speakers": sorted(all_known),
+    }
+
+
+@app.get("/api/meeting/sessions")
+def list_meeting_sessions():
+    """列出后端已知的活跃会议（运维 / 管理用）。"""
+    out = []
+    for s in session_manager.list():
+        out.append({
+            "session_id": s.session_id,
+            "label": s.label,
+            "created_at": s.created_at,
+            "last_active_at": s.last_active_at,
+            "participants": sorted(s.participants),
+            "transcript_items": len(transcript_buffer.list_items(s.session_id)),
+        })
+    return {"sessions": out, "ttl_sec": session_manager.ttl_sec}
+
+
+@app.post("/api/meeting/sessions/start")
+def start_meeting_session(req: SessionStartRequest):
+    sid = _normalize_session_id(req.session_id)
+    if sid == "default":
+        raise HTTPException(400, "session_id 不能为空或 default")
+    s = session_manager.start(sid, label=req.label)
+    return {
+        "session_id": s.session_id,
+        "label": s.label,
+        "created_at": s.created_at,
+        "last_active_at": s.last_active_at,
+    }
+
+
+@app.post("/api/meeting/sessions/stop")
+def stop_meeting_session(req: SessionStopRequest):
+    sid = _normalize_session_id(req.session_id)
+    if sid == "default":
+        raise HTTPException(400, "session_id 不能为空或 default")
+    asr_engine.reset_session(sid)
+    transcript_buffer.clear(sid)
+    dialogue_manager.stop(sid)
+    dialogue_manager.stop(f"wake_{sid}")
+    _assistant_history_clear_session_ids(
+        sid, f"chat_{sid}", f"wake_{sid}",
+    )
+    participants_registry.clear(sid)
+    removed = session_manager.stop(sid)
+    return {"ok": True, "removed": removed, "session_id": sid}
 
 
 @app.delete("/api/speakers/{name}")
