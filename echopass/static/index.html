@@ -2074,6 +2074,7 @@
 
   <div class="toast" id="toast"></div>
 
+  <script src="/js/ui-theme.js"></script>
   <script>
     // ═══════════════════════════════════════════════════
     // 0) 基础工具
@@ -3898,7 +3899,7 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
     // 8) 设置抽屉：服务状态 / 阈值 / 声纹注册 / 唤醒阈值 / VAD
     // ═══════════════════════════════════════════════════
     function openDrawer() {
-      setThemePopoverOpen(false);
+      window.EchoPassTheme.setPopoverOpen(false);
       $('drawer').classList.add('show');
       $('drawerOverlay').classList.add('show');
       refreshHealth();
@@ -4909,71 +4910,14 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
     updateExportButtonState();
 
     // ═══════════════════════════════════════════════════
-    // 16b) 界面风格（与 head 内预载一致，localStorage）
-    // ═══════════════════════════════════════════════════
-    const THEME_STORAGE_KEY = 'echopass_ui_theme';
-    const THEME_IDS = ['aurora', 'midnight', 'ember', 'forest', 'paper'];
-    function applyUiTheme(id) {
-      if (!THEME_IDS.includes(id)) id = 'aurora';
-      if (id === 'aurora') {
-        document.documentElement.removeAttribute('data-theme');
-      } else {
-        document.documentElement.setAttribute('data-theme', id);
-      }
-      try { localStorage.setItem(THEME_STORAGE_KEY, id); } catch (_) {}
-      document.querySelectorAll('.theme-pill').forEach((btn) => {
-        const bid = btn.getAttribute('data-theme-id');
-        btn.setAttribute('aria-pressed', bid === id ? 'true' : 'false');
-      });
-      try {
-        if (typeof drawWaveform === 'function') drawWaveform();
-      } catch (_) {}
-    }
-    function setThemePopoverOpen(open) {
-      const pop = $('themePopover');
-      const btn = $('btnThemeUi');
-      if (!pop || !btn) return;
-      if (open) pop.removeAttribute('hidden');
-      else pop.setAttribute('hidden', '');
-      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-      btn.classList.toggle('active', !!open);
-    }
-    function initUiTheme() {
-      let saved = 'aurora';
-      try { saved = localStorage.getItem(THEME_STORAGE_KEY) || 'aurora'; } catch (_) {}
-      if (!THEME_IDS.includes(saved)) saved = 'aurora';
-      applyUiTheme(saved);
-      const wrap = document.querySelector('.theme-popover-wrap');
-      const btnTheme = $('btnThemeUi');
-      if (btnTheme) {
-        btnTheme.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const pop = $('themePopover');
-          if (!pop) return;
-          setThemePopoverOpen(pop.hasAttribute('hidden'));
-        });
-      }
-      document.addEventListener('click', (e) => {
-        if (!wrap || wrap.contains(e.target)) return;
-        const pop = $('themePopover');
-        if (pop && !pop.hasAttribute('hidden')) setThemePopoverOpen(false);
-      });
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') setThemePopoverOpen(false);
-      });
-      document.querySelectorAll('.theme-pill').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          applyUiTheme(btn.getAttribute('data-theme-id') || 'aurora');
-          setThemePopoverOpen(false);
-        });
-      });
-    }
-
-    // ═══════════════════════════════════════════════════
     // 17) 引导
     // ═══════════════════════════════════════════════════
     function bootstrap() {
-      initUiTheme();
+      window.EchoPassTheme.init({
+        onThemeChanged: () => {
+          try { drawWaveform(); } catch (_) {}
+        },
+      });
       updateHeaderDate();
       setInterval(updateHeaderDate, 30_000);
       setRecUi('stopped');
