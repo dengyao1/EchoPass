@@ -927,7 +927,7 @@
     /* ======== 右栏：AI 问答 ======== */
     .chat-scope {
       font-size: 0.74rem; color: var(--muted);
-      padding: 0 1.2rem 0.75rem;
+      padding: 0.65rem 1.2rem 0.75rem;
       border-bottom: 1px solid rgba(255,255,255,0.08);
     }
     .chat-scope .tag-inline {
@@ -1627,14 +1627,48 @@
     html[data-theme="paper"] .audio-panel { border-bottom-color: var(--border); }
     html[data-theme="paper"] .audio-times { color: var(--muted); }
     html[data-theme="paper"] .waveform-empty { color: var(--muted); }
-    html[data-theme="paper"] .audio-progress .track { background: rgba(15, 23, 42, 0.1); }
+    html[data-theme="paper"] .audio-progress .track { background: rgba(15, 23, 42, 0.12); }
     html[data-theme="paper"] .waveform-wrap canvas {
-      background: linear-gradient(180deg, rgba(15, 23, 42, 0.05), rgba(15, 23, 42, 0.02));
+      background: #eef2f7;
+      border: 1px solid rgba(15, 23, 42, 0.1);
+      box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+    html[data-theme="paper"] .audio-progress input[type="range"]::-webkit-slider-thumb {
+      background: #4f46e5;
+      border: 2px solid #fff;
+      box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.12);
+    }
+    html[data-theme="paper"] .audio-progress input[type="range"]::-moz-range-thumb {
+      background: #4f46e5;
+      border: 2px solid #fff;
+      box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.12);
+    }
+    html[data-theme="paper"] .audio-btn {
+      background: #fff;
+      border: 1px solid rgba(15, 23, 42, 0.14);
+      color: var(--text-sub);
+    }
+    html[data-theme="paper"] .audio-btn.play:not(:disabled) {
+      background: linear-gradient(135deg, #0d9488, #4f46e5);
+      border-color: rgba(67, 56, 202, 0.55);
+      color: #fff;
+      box-shadow: 0 4px 18px rgba(79, 70, 229, 0.28);
+    }
+    html[data-theme="paper"] .audio-btn.play:disabled {
+      opacity: 1;
+      background: #e2e8f0;
+      border: 1px solid rgba(15, 23, 42, 0.16);
+      color: #475569;
+      box-shadow: none;
     }
     html[data-theme="paper"] .audio-btn:hover {
       color: var(--text);
       border-color: rgba(13, 148, 136, 0.45);
-      box-shadow: 0 0 12px rgba(79, 70, 229, 0.15);
+      box-shadow: 0 2px 12px rgba(79, 70, 229, 0.12);
+    }
+    html[data-theme="paper"] .audio-btn.play:not(:disabled):hover {
+      color: #fff;
+      filter: brightness(1.03);
     }
     html[data-theme="paper"] .chat-scope {
       color: var(--text-sub);
@@ -4294,6 +4328,10 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
 
       const cy = h / 2;
       ctx.lineCap = 'round';
+      const paperLight = document.documentElement.getAttribute('data-theme') === 'paper';
+      const strokePlayed = paperLight ? 'rgba(79, 70, 229, 0.88)' : 'rgba(122, 92, 255, 0.95)';
+      const strokeUnplayed = paperLight ? 'rgba(71, 85, 105, 0.38)' : 'rgba(255, 255, 255, 0.18)';
+      const strokeNeedle = paperLight ? 'rgba(13, 148, 136, 0.92)' : 'rgba(61, 246, 255, 0.95)';
       for (let x = 0; x < N; x++) {
         let p = 0, cnt = 0;
         const start = x * peaksPerBar;
@@ -4303,10 +4341,8 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
         if (!cnt) continue;
         const amp = Math.max(1.5, p * (h * 0.46));
         const isPlayed = x <= playedX;
-        ctx.strokeStyle = isPlayed
-          ? 'rgba(122, 92, 255, 0.95)'
-          : 'rgba(255, 255, 255, 0.18)';
-        ctx.lineWidth = 1.4;
+        ctx.strokeStyle = isPlayed ? strokePlayed : strokeUnplayed;
+        ctx.lineWidth = paperLight ? 1.55 : 1.4;
         ctx.beginPath();
         ctx.moveTo(x + 0.5, cy - amp);
         ctx.lineTo(x + 0.5, cy + amp);
@@ -4314,7 +4350,7 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       }
       // 当前位置指针
       if (totalDur > 0) {
-        ctx.strokeStyle = 'rgba(61, 246, 255, 0.95)';
+        ctx.strokeStyle = strokeNeedle;
         ctx.lineWidth = 1.4;
         ctx.beginPath();
         ctx.moveTo(playedX + 0.5, 2);
@@ -4889,6 +4925,9 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
         const bid = btn.getAttribute('data-theme-id');
         btn.setAttribute('aria-pressed', bid === id ? 'true' : 'false');
       });
+      try {
+        if (typeof drawWaveform === 'function') drawWaveform();
+      } catch (_) {}
     }
     function setThemePopoverOpen(open) {
       const pop = $('themePopover');
