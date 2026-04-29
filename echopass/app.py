@@ -149,6 +149,7 @@ from echopass.engine import (
 from echopass.agent.dialogue_manager import DialogueManager
 from echopass.agent.llm_client import LLMChatClient
 from echopass.agent.participants import ParticipantsRegistry
+from echopass.meeting.cross_meeting import CrossMeetingRef, CrossMeetingSummarizer
 from echopass.meeting.summarizer import MeetingSummarizer
 from echopass.meeting.transcript_buffer import TranscriptBuffer
 from echopass.session.manager import SessionManager
@@ -317,6 +318,7 @@ _wake_ack_audio = _safe_wake_ack_audio_path(
 )
 dialogue_manager = DialogueManager(ttl_sec=_assistant_ttl_sec)
 meeting_summarizer = MeetingSummarizer(llm_chat_client=llm_chat)
+cross_meeting_summarizer = CrossMeetingSummarizer(llm_chat_client=llm_chat)
 
 # 多会议并发：每个浏览器/标签页用唯一 session_id，由 SessionManager 维护元信息
 # session.ttl_sec：长时间无心跳/调用即清理；建议比 assistant.ttl_sec 大一档
@@ -427,6 +429,23 @@ class AssistantReplyRequest(BaseModel):
 class MeetingSummaryRequest(BaseModel):
     session_id: str = "default"
     title: str = "会议纪要"
+
+
+class CrossMeetingInputItem(BaseModel):
+    """跨场总结中单场输入；未来可从 DB 批量拉取后映射为此结构。"""
+
+    session_id: str
+    title: str = "会议"
+    summary_text: str = ""
+    captured_at: Optional[str] = None
+
+
+class CrossMeetingSummaryRequest(BaseModel):
+    """POST /api/meeting/summary/cross 请求体（预留；当前返回 stub 结构）。"""
+
+    meetings: List[CrossMeetingInputItem]
+    title: str = "跨会议总结"
+    focus: str = ""
 
 
 class MeetingChaptersRequest(BaseModel):
@@ -1278,6 +1297,27 @@ async def meeting_summary(req: MeetingSummaryRequest):
     summary = await meeting_summarizer.summarize(items, title=req.title)
     await emit_event("meeting_summary_ready", sid, {"title": summary.get("title", req.title)})
     return summary
+
+
+@app.post("/api/meeting/summary/cross")
+async def meeting_summary_cross(req: CrossMeetingSummaryRequest):
+    """跨会议总结（预留）：多场 ``summary_text`` + 可选 ``focus`` → 与单场兼容的 JSON。
+
+    实现 LLM 与持久化后，可在此触发展示用事件 ``meeting_cross_summary_ready``。
+    """
+    refs = [
+        CrossMeetingRef(
+            session_id=_normalize_session_id(m.session_id),
+            title=(m.title or "会议").strip() or "会议",
+            summary_text=(m.summary_text or "").strip(),
+            captured_at=(m.captured_at or "").strip() or None,
+        )
+        for m in req.meetings
+    ]
+    payload = await cross_meeting_summarizer.summarize(
+        refs, title=req.title.strip() or "跨会议总结", focus=(req.focus or "").strip(),
+    )
+    return payload
 
 
 @app.get("/api/meeting/transcript")
