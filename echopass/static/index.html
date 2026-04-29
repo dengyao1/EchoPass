@@ -2094,6 +2094,7 @@
   <div class="toast" id="toast"></div>
 
   <script src="/js/ui-theme.js"></script>
+  <script src="/js/meeting-chapters.js"></script>
   <script>
     // ═══════════════════════════════════════════════════
     // 0) 基础工具
@@ -2575,8 +2576,8 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
         return;
       }
       const parts = [];
-      for (const line of state.transcriptLines) {
-        parts.push(renderBubbleHtml(line, false));
+      for (let i = 0; i < state.transcriptLines.length; i++) {
+        parts.push(renderBubbleHtml(state.transcriptLines[i], false, i));
       }
       if (showCurrent) {
         parts.push(renderCurrentBubbleHtml());
@@ -2584,7 +2585,7 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       box.innerHTML = parts.join('');
       box.scrollTop = box.scrollHeight;
     }
-    function renderBubbleHtml(line, isCurrent) {
+    function renderBubbleHtml(line, isCurrent, lineIdx) {
       const who = line.who || '未知';
       const color = speakerColor(who);
       const initial = speakerInitial(who);
@@ -2594,8 +2595,11 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       const textHtml = state.showRaw
         ? escHtml(line.raw || line.text)
         : escHtml(line.text || line.raw || '');
+      const idxAttr = (typeof lineIdx === 'number' && !isCurrent)
+        ? ' data-line-idx="' + lineIdx + '"'
+        : '';
       return (
-        '<div class="bubble' + (isCurrent ? ' current' : '') + '">' +
+        '<div class="bubble' + (isCurrent ? ' current' : '') + '"' + idxAttr + '>' +
           '<div class="avatar" style="background:' + color + '">' + escHtml(initial) + '</div>' +
           '<div class="body">' +
             '<div class="meta"><span class="name">' + escHtml(who) + '</span>' +
@@ -2667,7 +2671,7 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       renderTranscript();
       renderTimelineList();
       renderSpeakersStats();
-      renderChapters();
+      EchoPassChapters.renderChapters();
       bumpSaveDebounce();
       scheduleSummaryRefresh();
     }
@@ -2818,7 +2822,7 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
         resetAudioPlayer();
         renderTimelineList();
         renderSpeakersStats();
-        renderChapters();
+        EchoPassChapters.renderChapters();
         updateHeaderDate();
         await api('/api/asr_reset?session_id=' + encodeURIComponent(state.liveSessionId), { method: 'POST' }).catch(() => {});
         // 把当前已选的「本场会议参与者」同步到本会议白名单（哪怕为空也写一遍，便于后端知道）
@@ -2909,7 +2913,7 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       finalizeAudioPlayer();
       renderTimelineList();
       renderSpeakersStats();
-      renderChapters();
+      EchoPassChapters.renderChapters();
       // 结束时最后一次纪要刷新
       if (state.transcriptLines.length) refreshSummary(true).catch(() => {});
       // 唤醒监听与会议录音同步：结束会议即关闭 KWS/唤醒订阅
@@ -4265,14 +4269,35 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       $('summaryToolbar').style.display = (name === 'summary') ? '' : 'none';
       if (name === 'summary') renderSummary();
       else if (name === 'chapters') {
-        renderChapters();
+        EchoPassChapters.renderChapters();
         // 第一次切到章节 Tab 且有转录、还没生成过 → 自动触发一次
         if (!state.chaptersData && !state.chaptersInFlight && state.transcriptLines.length > 0) {
-          requestChapters();
+          EchoPassChapters.requestChapters();
         }
       }
       else if (name === 'speakers') renderSpeakersStats();
       else if (name === 'transcript') renderTranscript();
+    }
+
+    /** 切到转写 Tab、高亮时间轴、将左侧气泡列表滚到对应行（供章节 / 时间轴点击复用） */
+    function scrollTranscriptToLineIdx(idx) {
+      const lines = state.transcriptLines;
+      if (typeof idx !== 'number' || idx < 0 || idx >= lines.length) return;
+      if (state.midTab !== 'transcript') switchTab('transcript');
+      state.activeLineIdx = idx;
+      renderTimelineList();
+      requestAnimationFrame(() => {
+        let target = document.querySelector('#transcriptList .bubble[data-line-idx="' + idx + '"]');
+        if (!target) {
+          const all = document.querySelectorAll('#transcriptList .bubble');
+          if (idx < all.length) target = all[idx];
+        }
+        if (target && target.scrollIntoView) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          target.classList.add('current');
+          setTimeout(() => target.classList.remove('current'), 1500);
+        }
+      });
     }
 
     // ═══════════════════════════════════════════════════
@@ -4519,24 +4544,8 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
           const idx = parseInt(node.getAttribute('data-idx'), 10);
           const line = state.transcriptLines[idx];
           if (!line) return;
-          if (state.audioUrl) {
-            seekAudioTo((line.start_ms || 0) / 1000);
-          } else {
-            // 录音进行中尚无完整 WAV，仅高亮联动
-            state.activeLineIdx = idx;
-            renderTimelineList();
-          }
-          // 联动中栏：切到转录 Tab，把对应气泡滚到视野
-          if (state.midTab !== 'transcript') switchTab('transcript');
-          requestAnimationFrame(() => {
-            const bubbles = document.querySelectorAll('#transcriptList .bubble');
-            const target = bubbles[idx];
-            if (target && target.scrollIntoView) {
-              target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              target.classList.add('current');
-              setTimeout(() => target.classList.remove('current'), 1500);
-            }
-          });
+          if (state.audioUrl) seekAudioTo((line.start_ms || 0) / 1000);
+          scrollTranscriptToLineIdx(idx);
         });
       });
     }
@@ -4642,144 +4651,8 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
     }
 
     // ═══════════════════════════════════════════════════
-    // 14) 中栏 · 章节 Tab（AI 生成：精炼标题 + 2-4 句摘要 + 时间徽章）
-    //
-    // 数据流：state.chaptersData ← POST /api/meeting/chapters。
-    // 触发时机：用户点"立即生成"按钮；切到章节 Tab 时若数据为空且有转录则自动触发一次。
-    // 没数据时仍展示占位文案，强调要由 AI 生成。
+    // 14) 章节 Tab → /js/meeting-chapters.js（EchoPassChapters.init 在 bootstrap）
     // ═══════════════════════════════════════════════════
-
-    function _fmtRelTime(tsMs) {
-      if (!tsMs) return '';
-      const diff = Math.max(0, Date.now() - tsMs);
-      const sec = Math.round(diff / 1000);
-      if (sec < 60) return sec + ' 秒前';
-      const m = Math.floor(sec / 60);
-      if (m < 60) return m + ' 分钟前';
-      const h = Math.floor(m / 60);
-      if (h < 24) return h + ' 小时前';
-      return new Date(tsMs).toLocaleString();
-    }
-
-    function renderChapterToolbar() {
-      const meta = $('chapterMeta');
-      const btn = $('btnGenChapters');
-      const label = $('btnGenChaptersLabel');
-      if (!meta || !btn || !label) return;
-      const hasTranscript = state.transcriptLines.length > 0;
-      const inFlight = state.chaptersInFlight;
-
-      // 按钮禁用：无转录 / 正在请求中
-      btn.disabled = !hasTranscript || inFlight;
-      if (inFlight) {
-        label.innerHTML = '<span class="spin"></span> 正在生成…';
-      } else if (state.chaptersData && state.chaptersData.length) {
-        label.textContent = '重新生成';
-      } else {
-        label.textContent = '立即生成';
-      }
-
-      // 元信息：错误 > 已生成 > 转录数 > 默认
-      if (state.chaptersError) {
-        meta.innerHTML = '<b style="color:#ff8080">生成失败：</b>' + escHtml(state.chaptersError);
-      } else if (state.chaptersGeneratedAt) {
-        const cnt = state.chaptersData ? state.chaptersData.length : 0;
-        meta.innerHTML = '已生成 <b>' + cnt + '</b> 个章节 · 上次更新 <b>' + _fmtRelTime(state.chaptersGeneratedAt) + '</b>';
-      } else if (hasTranscript) {
-        meta.innerHTML = '当前共 <b>' + state.transcriptLines.length + '</b> 条转录，点击右侧按钮交给 AI 切章并起标题';
-      } else {
-        meta.textContent = '点击右侧按钮，让 AI 按话题切分章节并生成精炼标题';
-      }
-    }
-
-    function renderChapterList() {
-      const box = $('chapterList');
-      if (!box) return;
-      const chs = state.chaptersData || [];
-      if (!chs.length) {
-        if (state.chaptersInFlight) {
-          box.innerHTML = '<div class="summary-placeholder"><span class="emoji">⏳</span>AI 正在分析转录、提炼章节标题与摘要…</div>';
-        } else if (state.transcriptLines.length === 0) {
-          box.innerHTML = '<div class="summary-placeholder"><span class="emoji">📚</span>开始录音后点击"立即生成"，AI 会按话题切分章节并配上 2-4 句摘要</div>';
-        } else {
-          box.innerHTML = '<div class="summary-placeholder"><span class="emoji">📚</span>点击右上角"立即生成"，让 AI 按话题切分章节</div>';
-        }
-        return;
-      }
-      box.innerHTML = chs.map((c) => {
-        const startMs = c.start_ms || 0;
-        const endMs = c.end_ms || startMs;
-        const startSec = startMs / 1000;
-        const dur = Math.max(0, (endMs - startMs) / 1000);
-        const speakers = (c.speakers || []).filter(Boolean);
-        return (
-          '<div class="chapter-card" data-start="' + startMs + '">' +
-            '<div class="head">' +
-              '<span class="ts-badge" title="跳转到 ' + fmtMS(startSec) + '">' +
-                '<span class="play-icon"></span>' + fmtMS(startSec) +
-              '</span>' +
-              '<div class="title">' + escHtml(c.title || '（无标题）') + '</div>' +
-            '</div>' +
-            (c.summary ? '<div class="summary">' + escHtml(c.summary) + '</div>' : '') +
-            '<div class="footer">' +
-              (speakers.length ? '<span class="speakers">' + escHtml(speakers.join('、')) + '</span><span class="dot"></span>' : '') +
-              '<span>时长 ' + fmtMS(dur) + '</span>' +
-              (c.line_count ? '<span class="dot"></span><span>' + c.line_count + ' 段</span>' : '') +
-            '</div>' +
-          '</div>'
-        );
-      }).join('');
-      box.querySelectorAll('.chapter-card').forEach((node) => {
-        node.addEventListener('click', () => {
-          const startMs = parseInt(node.getAttribute('data-start'), 10) || 0;
-          if (state.audioUrl) seekAudioTo(startMs / 1000);
-          state.activeLineIdx = state.transcriptLines.findIndex((l) => (l.start_ms || 0) >= startMs);
-          renderTimelineList();
-        });
-      });
-    }
-
-    function renderChapters() {
-      renderChapterToolbar();
-      renderChapterList();
-    }
-
-    async function requestChapters() {
-      if (state.chaptersInFlight) return;
-      if (!state.transcriptLines.length) {
-        state.chaptersError = '当前没有转录文本，无法生成章节';
-        renderChapterToolbar();
-        return;
-      }
-      state.chaptersInFlight = true;
-      state.chaptersError = null;
-      renderChapters();
-      try {
-        const sid = state.liveSessionId || 'default';
-        const resp = await fetch('/api/meeting/chapters', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id: sid }),
-        });
-        if (!resp.ok) {
-          throw new Error('HTTP ' + resp.status);
-        }
-        const data = await resp.json();
-        state.chaptersData = Array.isArray(data.chapters) ? data.chapters : [];
-        state.chaptersGeneratedAt = Date.now();
-      } catch (err) {
-        state.chaptersError = (err && err.message) || String(err);
-      } finally {
-        state.chaptersInFlight = false;
-        renderChapters();
-      }
-    }
-
-    // 章节工具条按钮：手动触发；切到章节 Tab 时若空则自动触发
-    document.addEventListener('DOMContentLoaded', () => {
-      const btn = document.getElementById('btnGenChapters');
-      if (btn) btn.addEventListener('click', requestChapters);
-    });
 
     // ═══════════════════════════════════════════════════
     // 15) 右栏 · AI 问答会话
@@ -5047,12 +4920,20 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       initTabs();
       initAudioPlayer();
       initChat();
+      EchoPassChapters.init({
+        $: $,
+        escHtml: escHtml,
+        fmtMS: fmtMS,
+        getState: function () { return state; },
+        seekAudioTo: seekAudioTo,
+        scrollTranscriptToLineIdx: scrollTranscriptToLineIdx,
+      });
       switchTab('transcript');
       renderTranscript();
       renderSummary();
       renderTimelineList();
       renderSpeakersStats();
-      renderChapters();
+      EchoPassChapters.renderChapters();
       renderChatHistory();
       startSummaryTicker();
       refreshHealth();
