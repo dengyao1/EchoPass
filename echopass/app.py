@@ -545,6 +545,7 @@ def health():
         "asr_ready": asr_engine._model is not None,
         "asr_provider": "volcengine",
         "asr_ws_url": asr_engine.ws_url,
+        "asr_max_concurrent": getattr(asr_engine, "max_concurrent", 0),
         # 兼容保留（前端 status lamp 仍引用这两个字段）：云端引擎下值固定
         "funasr_base": str(FUNASR_BASE),
         "funasr_local_weights": True,

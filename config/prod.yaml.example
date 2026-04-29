@@ -33,6 +33,9 @@ llm:
 asr:
   hotword: ""
   funasr_base: ""
+  # 进程内同时进行中的火山 ASR WebSocket 上限；多场会议并行时每场可各占 1 槽位。
+  # 0 = 不限制（易把出口带宽/火山侧连接打满，不推荐生产）
+  max_concurrent: 32
   volc:
     api: "bigmodel"
     appid: ""                  # ☆ 火山 ASR AppID

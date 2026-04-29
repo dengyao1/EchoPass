@@ -367,7 +367,6 @@ class StreamingASREngine:
         del base_dir  # 仅为了兼容老调用签名，这里不再使用本地权重
         self._model = None
         self._client = None
-        self._lock = threading.Lock()
 
         # 配置来源优先级：环境变量 > config/*.yaml > 类内置默认
         from echopass.config import cfg
@@ -399,6 +398,34 @@ class StreamingASREngine:
         # 0/None 都视为"未设置，按 api 选默认"
         self._seg_ms = seg_raw if (seg_raw and seg_raw > 0) else default_seg
 
+        # 高并发：不再用单把全局锁串行所有会议。改为「每 session 一把锁」避免同一会话
+        # 多段 PCM 并发乱序；再用全局 BoundedSemaphore 限制进程内同时进行中的火山 WS 数。
+        # 顺序必须是：先占 session 锁，再在锁内 acquire 信号量，否则同一会话两段会各占
+        # 一个 sem 名额却卡在 session 锁上，形成死锁。
+        _max_conc = cfg("asr.max_concurrent", "SPEAKER_ASR_MAX_CONCURRENT", 32, int)
+        self._asr_max_concurrent = max(0, int(_max_conc))
+        self._asr_global_sem: Optional[threading.BoundedSemaphore] = (
+            threading.BoundedSemaphore(self._asr_max_concurrent)
+            if self._asr_max_concurrent > 0
+            else None
+        )
+        self._session_locks_guard = threading.Lock()
+        self._session_locks: Dict[str, threading.Lock] = {}
+
+    @staticmethod
+    def _norm_asr_session(session_id: str) -> str:
+        s = (session_id or "").strip()
+        return s if s else "default"
+
+    def _session_lock(self, session_id: str) -> threading.Lock:
+        sid = self._norm_asr_session(session_id)
+        with self._session_locks_guard:
+            lock = self._session_locks.get(sid)
+            if lock is None:
+                lock = threading.Lock()
+                self._session_locks[sid] = lock
+            return lock
+
     @property
     def provider(self) -> str:
         return f"volcengine/{self._api}"
@@ -406,6 +433,11 @@ class StreamingASREngine:
     @property
     def ws_url(self) -> str:
         return self._ws_url
+
+    @property
+    def max_concurrent(self) -> int:
+        """0 表示不限制进程内并发火山 ASR 调用数（不推荐生产）。"""
+        return getattr(self, "_asr_max_concurrent", 0)
 
     def _local_paths_ok(self) -> bool:
         """云端引擎永远不依赖本地权重。保留方法以兼容 /api/health。"""
@@ -463,8 +495,10 @@ class StreamingASREngine:
         self._model = self._client
 
     def reset_session(self, session_id: str) -> None:
-        """每段 PCM = 独立 WS 会话，服务端无跨请求状态。保留接口兼容前端。"""
-        del session_id  # noqa: ARG002
+        """每段 PCM = 独立 WS 会话，服务端无跨请求状态。释放该 session 的互斥锁表项，避免 dict 无限增长。"""
+        sid = self._norm_asr_session(session_id)
+        with self._session_locks_guard:
+            self._session_locks.pop(sid, None)
 
     def transcribe_chunk(
         self,
@@ -478,45 +512,52 @@ class StreamingASREngine:
         `hotword` 为空格分隔的专有名词，透传给火山 request.hotword 字段；
         部分集群不识别该字段时会被静默忽略，不影响主流程。
         """
-        del session_id, is_final  # 每段独立识别，无跨请求状态
+        del is_final  # 每段独立识别，无跨请求状态；session_id 用于并发隔离
         if pcm_16k is None or pcm_16k.size < 1600:
             return ""
         self._ensure_model()
         audio = np.asarray(pcm_16k, dtype=np.float32)
-        # 加 lock 仅用于限制并发，避免单机同时压出太多 WS；不是保护 self._client 自身
-        with self._lock:
+        lock = self._session_lock(session_id)
+        sem = self._asr_global_sem
+        with lock:
+            if sem is not None:
+                sem.acquire()
             try:
-                return self._client.transcribe_pcm16k(audio, hotword=hotword) or ""
-            except Exception as e:  # noqa: BLE001
-                import logging
-                msg = str(e)
-                # 下列情况都属于"本段无语音"的正常业务行为，按 DEBUG 静默丢弃，避免刷屏：
-                #   - 通用版 code=1013       = No valid speeches found
-                #   - 大模型版 code=20000003 / 45000002 = 静音 / 空音频
-                #   - str(e) 为空            = Py3.11+ 下 asyncio.TimeoutError /
-                #     concurrent.futures.TimeoutError __str__ 返回空串，通常是
-                #     火山服务端对静音段既不返回结果也不发 is_last 导致的 recv 超时
-                #     （volc_bigmodel_asr.receiver 已做一层容错，这里再兜一层）
-                #   - ConnectionClosed / timed out 字样
-                # 其他错误码仍走 WARNING 便于排障。
-                low = msg.lower()
-                is_silent = (
-                    not msg
-                    or "code=1013" in msg
-                    or "code=20000003" in msg
-                    or "code=45000002" in msg
-                    or "connectionclosed" in low
-                    or "timeout" in low
-                )
-                if is_silent:
-                    logging.getLogger("echopass").debug(
-                        "火山 ASR 本段无语音，静默丢弃（msg=%r）", msg, exc_info=False,
+                try:
+                    return self._client.transcribe_pcm16k(audio, hotword=hotword) or ""
+                except Exception as e:  # noqa: BLE001
+                    import logging
+                    msg = str(e)
+                    # 下列情况都属于"本段无语音"的正常业务行为，按 DEBUG 静默丢弃，避免刷屏：
+                    #   - 通用版 code=1013       = No valid speeches found
+                    #   - 大模型版 code=20000003 / 45000002 = 静音 / 空音频
+                    #   - str(e) 为空            = Py3.11+ 下 asyncio.TimeoutError /
+                    #     concurrent.futures.TimeoutError __str__ 返回空串，通常是
+                    #     火山服务端对静音段既不返回结果也不发 is_last 导致的 recv 超时
+                    #     （volc_bigmodel_asr.receiver 已做一层容错，这里再兜一层）
+                    #   - ConnectionClosed / timed out 字样
+                    # 其他错误码仍走 WARNING 便于排障。
+                    low = msg.lower()
+                    is_silent = (
+                        not msg
+                        or "code=1013" in msg
+                        or "code=20000003" in msg
+                        or "code=45000002" in msg
+                        or "connectionclosed" in low
+                        or "timeout" in low
                     )
-                else:
-                    logging.getLogger("echopass").warning(
-                        "火山 ASR 调用失败，本段返回空串：%s", msg,
-                    )
-                return ""
+                    if is_silent:
+                        logging.getLogger("echopass").debug(
+                            "火山 ASR 本段无语音，静默丢弃（msg=%r）", msg, exc_info=False,
+                        )
+                    else:
+                        logging.getLogger("echopass").warning(
+                            "火山 ASR 调用失败，本段返回空串：%s", msg,
+                        )
+                    return ""
+            finally:
+                if sem is not None:
+                    sem.release()
 
 
 # ---------------------------------------------------------------------------
