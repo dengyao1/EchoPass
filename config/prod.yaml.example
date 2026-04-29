@@ -34,6 +34,8 @@ llm:
   api_url: ""                  # ☆ 例如 https://api.deepseek.com/v1/chat/completions
   api_key: ""                  # ☆ 自有 LLM Key
   model: ""                    # ☆ 例如 deepseek-chat / qwen-plus / ep-xxx-xxx
+  # 单次 chat / 流式整段请求超时（秒）；纪要、章节、助手共用 LLMChatClient
+  timeout_sec: 120
   asr_correction: false
 
 asr:

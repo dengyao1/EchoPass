@@ -5,18 +5,47 @@ import http.client
 import json
 import ssl
 import threading
+import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any, AsyncIterator, Dict, Iterator, List, Optional
 
 
+def _http_error_message(body: str) -> str:
+    """从 OpenAI 兼容错误 JSON 或纯文本里抽出可读说明。"""
+    body = (body or "").strip()
+    if not body:
+        return ""
+    try:
+        j = json.loads(body)
+        if isinstance(j, dict):
+            err = j.get("error")
+            if isinstance(err, dict):
+                return str(err.get("message") or err.get("code") or err)[:1500]
+            if isinstance(err, str):
+                return err[:1500]
+            if "message" in j:
+                return str(j["message"])[:1500]
+    except json.JSONDecodeError:
+        pass
+    return body[:1500]
+
+
 class LLMChatClient:
     """OpenAI-compatible chat client，用于唤醒后的问答与纪要抽取。"""
 
-    def __init__(self, api_url: str, api_key: str = "none", model: str = "qwen-plus") -> None:
-        self._url = api_url.rstrip("/")
+    def __init__(
+        self,
+        api_url: str,
+        api_key: str = "none",
+        model: str = "qwen-plus",
+        *,
+        timeout_sec: float = 120.0,
+    ) -> None:
+        self._url = (api_url or "").rstrip("/")
         self._key = api_key
         self._model = model
+        self._timeout = max(5.0, float(timeout_sec))
 
     @staticmethod
     def _validate_messages_openai(
@@ -40,6 +69,8 @@ class LLMChatClient:
         temperature: float = 0.3,
     ) -> str:
         """OpenAI Chat 多轮。messages 须含 system 与若干 user/assistant（按时间顺序）。"""
+        if not self._url:
+            raise ValueError("LLM api_url 未配置：请设置 llm.api_url 或 SPEAKER_LLM_API_URL")
         clean = self._validate_messages_openai(messages)
         payload = json.dumps(
             {
@@ -61,17 +92,29 @@ class LLMChatClient:
         )
         loop = asyncio.get_event_loop()
 
-        def _call():
-            with urllib.request.urlopen(req, timeout=120) as resp:
-                return json.loads(resp.read().decode("utf-8"))
+        def _call() -> dict:
+            try:
+                with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+                    return json.loads(resp.read().decode("utf-8"))
+            except urllib.error.HTTPError as e:
+                raw = e.read().decode("utf-8", errors="replace")
+                hint = _http_error_message(raw) or raw[:800]
+                raise RuntimeError(f"LLM HTTP {e.code}: {hint}") from e
+            except urllib.error.URLError as e:
+                raise RuntimeError(f"LLM 网络错误: {getattr(e, 'reason', e)!s}") from e
 
         data = await loop.run_in_executor(None, _call)
-        return (
+        err = data.get("error") if isinstance(data, dict) else None
+        if isinstance(err, dict) and err.get("message"):
+            raise RuntimeError(f"LLM 返回错误: {err.get('message')}")
+        content = (
             data.get("choices", [{}])[0]
             .get("message", {})
             .get("content", "")
-            .strip()
         )
+        if content is None:
+            return ""
+        return str(content).strip()
 
     async def reply(self, text: str, system_prompt: str = "你是会议语音助手。", max_tokens: int = 512) -> str:
         return await self.chat_complete(
@@ -107,6 +150,8 @@ class LLMChatClient:
         temperature: float = 0.3,
     ) -> Iterator[str]:
         """同步生成器：OpenAI 兼容 SSE，多轮 messages。"""
+        if not self._url:
+            raise ValueError("LLM api_url 未配置：请设置 llm.api_url 或 SPEAKER_LLM_API_URL")
         clean = self._validate_messages_openai(messages)
         body = {
             "model": self._model,
@@ -133,17 +178,20 @@ class LLMChatClient:
         }
         if p.scheme == "https":
             conn = http.client.HTTPSConnection(
-                p.netloc, timeout=120, context=ssl.create_default_context(),
+                p.netloc,
+                timeout=self._timeout,
+                context=ssl.create_default_context(),
             )
         else:
-            conn = http.client.HTTPConnection(p.netloc, timeout=120)
+            conn = http.client.HTTPConnection(p.netloc, timeout=self._timeout)
         try:
             conn.request("POST", path, body=payload, headers=headers)
             resp = conn.getresponse()
             if resp.status != 200:
-                err = resp.read(4096)
+                err = resp.read(8192)
+                hint = _http_error_message(err.decode("utf-8", errors="replace"))
                 raise RuntimeError(
-                    f"LLM stream HTTP {resp.status}: {err.decode('utf-8', errors='replace')[:800]}",
+                    f"LLM stream HTTP {resp.status}: {hint or err.decode('utf-8', errors='replace')[:800]}",
                 )
             buf = b""
             while True:
@@ -182,19 +230,20 @@ class LLMChatClient:
         temperature: float = 0.3,
     ) -> AsyncIterator[str]:
         """多轮 messages 流式输出（与 chat_complete 使用同一套 messages 约定）。"""
-        self._validate_messages_openai(messages)
+        clean = self._validate_messages_openai(messages)
         loop = asyncio.get_event_loop()
         q: asyncio.Queue = asyncio.Queue(maxsize=256)
         err_box: List[Optional[BaseException]] = [None]
+        tmo = self._timeout
 
         def producer() -> None:
             try:
                 for piece in self._iter_chat_deltas_sync_messages(
-                    messages, max_tokens, temperature,
+                    clean, max_tokens, temperature,
                 ):
                     fut = asyncio.run_coroutine_threadsafe(q.put(("d", piece)), loop)
-                    fut.result(timeout=120)
-                asyncio.run_coroutine_threadsafe(q.put(("x", None)), loop).result(timeout=30)
+                    fut.result(timeout=tmo)
+                asyncio.run_coroutine_threadsafe(q.put(("x", None)), loop).result(timeout=min(60.0, tmo))
             except BaseException as e:  # noqa: BLE001
                 err_box[0] = e
                 try:
@@ -212,7 +261,7 @@ class LLMChatClient:
                 else:
                     break
         finally:
-            t.join(timeout=0.2)
+            t.join(timeout=min(5.0, tmo))
         if err_box[0] is not None:
             raise err_box[0]
 

@@ -186,11 +186,14 @@ asr_engine = StreamingASREngine(base_dir=FUNASR_BASE)
 _llm_url   = cfg("llm.api_url", "SPEAKER_LLM_API_URL", "", str)
 _llm_key   = cfg("llm.api_key", "SPEAKER_LLM_API_KEY", "", str)
 _llm_model = cfg("llm.model",   "SPEAKER_LLM_MODEL",   "", str)
+_llm_timeout = max(5.0, cfg("llm.timeout_sec", "SPEAKER_LLM_TIMEOUT_SEC", 120.0, float))
 _asr_llm_correction = cfg("llm.asr_correction", "SPEAKER_ASR_LLM_CORRECTION", False, to_bool)
 # ASR 热词（前端 query 参数 hotword 优先级更高）
 _asr_hotword_env = cfg("asr.hotword", "SPEAKER_ASR_HOTWORD", "", str)
 llm_corrector = LLMCorrector(api_url=_llm_url, api_key=_llm_key, model=_llm_model)
-llm_chat = LLMChatClient(api_url=_llm_url, api_key=_llm_key, model=_llm_model)
+llm_chat = LLMChatClient(
+    api_url=_llm_url, api_key=_llm_key, model=_llm_model, timeout_sec=_llm_timeout,
+)
 
 # 唤醒词引擎（可选，关键词通过 yaml/env 配置）
 # kws.enabled 默认 false：不加载本地 CTC 唤醒模型；设为 true 才启用「小云小云」检测
@@ -550,6 +553,7 @@ def health():
         "funasr_base": str(FUNASR_BASE),
         "funasr_local_weights": True,
         "llm_correction": bool(llm_corrector) and _asr_llm_correction,
+        "llm_timeout_sec": _llm_timeout,
         "kws_enabled": _kws_enabled,
         "kws_keywords": _kws_keywords,
         "kws_threshold": _kws_threshold,
