@@ -4755,10 +4755,11 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       state.chaptersError = null;
       renderChapters();
       try {
+        const sid = state.liveSessionId || 'default';
         const resp = await fetch('/api/meeting/chapters', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id: 'default' }),
+          body: JSON.stringify({ session_id: sid }),
         });
         if (!resp.ok) {
           throw new Error('HTTP ' + resp.status);

@@ -4,6 +4,7 @@ import json
 import re
 from typing import Any, Dict, List, Optional
 
+from echopass.config import cfg
 from echopass.meeting.transcript_buffer import TranscriptItem
 
 
@@ -28,6 +29,11 @@ class MeetingSummarizer:
     # 章节回退规则阈值：超过 90s 静默 / 3min max 切章（与前端一致，便于协同）
     _FALLBACK_GAP_MS = 90_000
     _FALLBACK_MAX_MS = 3 * 60 * 1000
+    # 后处理：时间重叠合并、过短「微章」并入相邻章（毫秒 / 行数阈值）
+    _CHAPTER_OVERLAP_GRACE_MS = 2_000
+    _CHAPTER_TINY_MAX_MS = 50_000
+    _CHAPTER_TINY_MAX_LINES = 2
+    _CHAPTER_TINY_GAP_MS = 25_000  # 与上一章结束间隔在此内才考虑把微章并入上一章
 
     def __init__(self, llm_chat_client=None) -> None:
         self._llm = llm_chat_client
@@ -328,12 +334,24 @@ class MeetingSummarizer:
         if self._llm:
             out = await self._chapters_with_llm(items)
             if out:
-                return out
-        return self._fallback_chapters(items)
+                return self._postprocess_chapters(out)
+        return self._postprocess_chapters(self._fallback_chapters(items))
 
     async def _chapters_with_llm(self, items: List[TranscriptItem]) -> Optional[List[Dict]]:
-        # 超长会议软截断：太长的 prompt 容易被 LLM 拒绝，最近的 120 句最有意义
-        window = items[-120:]
+        # 超长会议软截断：prompt 过长易被 LLM 拒绝；行数可配置（默认最近 120 条）
+        window_n = max(
+            40,
+            min(
+                200,
+                cfg(
+                    "meeting.chapters.prompt_max_lines",
+                    "SPEAKER_CHAPTER_PROMPT_LINES",
+                    120,
+                    int,
+                ),
+            ),
+        )
+        window = items[-window_n:]
         base_idx = len(items) - len(window)
         numbered: List[str] = []
         for i, it in enumerate(window):
@@ -353,7 +371,9 @@ class MeetingSummarizer:
             "2. title 控制在 10~20 个汉字，概括主题，不要以时间/发言人开头。\n"
             "3. summary 2-4 句话，点出这一章谁在讲、讲了什么、得出了什么结论。\n"
             "4. 章节数量通常 3~15 个，不要无限细分。\n"
-            "5. 不要输出任何解释性文字，只输出 JSON。\n\n"
+            "5. 相邻章节在时间轴上不要重叠；若某段内容很少（不足约 40 秒且行数很少），"
+            "并入前后同一话题的一章，不要单立成章。\n"
+            "6. 不要输出任何解释性文字，只输出 JSON。\n\n"
             "转录：\n" + "\n".join(numbered)
         )
         try:
@@ -406,6 +426,70 @@ class MeetingSummarizer:
                 "end_line": base_idx + e_idx,
             })
         return out or None
+
+    def _postprocess_chapters(self, chapters: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """按开始时间排序；合并时间重叠的相邻章；将过短片段并入上一章。"""
+        if not chapters:
+            return []
+        rows = sorted(chapters, key=lambda c: int(c.get("start_ms") or 0))
+        grace = self._CHAPTER_OVERLAP_GRACE_MS
+        tiny_ms = self._CHAPTER_TINY_MAX_MS
+        tiny_lines = self._CHAPTER_TINY_MAX_LINES
+        tiny_gap = self._CHAPTER_TINY_GAP_MS
+
+        def _merge_into(prev: Dict[str, Any], cur: Dict[str, Any]) -> None:
+            pe = int(prev.get("end_ms") or prev.get("start_ms") or 0)
+            ce = int(cur.get("end_ms") or cur.get("start_ms") or 0)
+            prev["end_ms"] = max(pe, ce)
+            prev["line_count"] = int(prev.get("line_count") or 0) + int(cur.get("line_count") or 0)
+            sl_p, el_p = prev.get("start_line"), prev.get("end_line")
+            sl_c, el_c = cur.get("start_line"), cur.get("end_line")
+            if sl_p is not None and el_c is not None:
+                try:
+                    prev["start_line"] = min(int(sl_p), int(sl_c or sl_p))
+                    prev["end_line"] = max(int(el_p or sl_p), int(el_c or el_p))
+                except (TypeError, ValueError):
+                    pass
+            psum = str(prev.get("summary") or "").strip()
+            csum = str(cur.get("summary") or "").strip()
+            prev["summary"] = (psum + " " + csum).strip()[:900]
+            t_prev = str(prev.get("title") or "").strip()
+            t_cur = str(cur.get("title") or "").strip()
+            if len(t_cur) > len(t_prev):
+                prev["title"] = t_cur[:40]
+            sp_a = list(prev.get("speakers") or [])
+            seen = set(sp_a)
+            for s in cur.get("speakers") or []:
+                if s and s not in seen:
+                    seen.add(s)
+                    sp_a.append(s)
+            prev["speakers"] = sp_a
+
+        merged: List[Dict[str, Any]] = []
+        for ch in rows:
+            cur = dict(ch)
+            if not merged:
+                merged.append(cur)
+                continue
+            prev = merged[-1]
+            pe = int(prev.get("end_ms") or prev.get("start_ms") or 0)
+            cs = int(cur.get("start_ms") or 0)
+            ce = int(cur.get("end_ms") or cs)
+            dur = max(0, ce - cs)
+            lines_c = int(cur.get("line_count") or 0)
+            overlap = cs < pe - grace
+            gap_after_prev = cs - pe if cs >= pe else 0
+            tiny = dur <= tiny_ms and lines_c <= tiny_lines
+            merge_tiny = tiny and gap_after_prev <= tiny_gap and not overlap
+
+            if overlap or merge_tiny:
+                _merge_into(prev, cur)
+            else:
+                merged.append(cur)
+
+        for i, x in enumerate(merged, 1):
+            x["idx"] = i
+        return merged
 
     @staticmethod
     def _parse_chapters_json(text: str) -> Optional[List[Dict]]:

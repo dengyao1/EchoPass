@@ -22,6 +22,12 @@ assistant:
     max_items: 20
     max_chars: 1500
 
+# AI 章节：按话题切分 + 标题/摘要（见 echopass/meeting/summarizer.py）
+meeting:
+  chapters:
+    # 喂给章节 LLM 的最大转写条数（40~200）；长会可适当增大，注意 token 与超时
+    prompt_max_lines: 120
+
 preload_models: true
 
 llm:
