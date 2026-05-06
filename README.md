@@ -2,7 +2,7 @@
 
 **自部署的会议实时语音助手**（浏览器录音 → 火山流式 ASR → CAM++ 说话人 → LLM 纪要/章节/会中对话；可选「小云小云」本地唤醒与 TTS）。**云密钥与模型需自建配置**，见 [`config/prod.yaml.example`](config/prod.yaml.example)。详细设计见 [TECHNICAL_OVERVIEW.md](TECHNICAL_OVERVIEW.md)。
 
-**在线试用**：[EchoPass Demo](https://8.130.124.121:8765/)（自签 HTTPS 需「继续访问」；不保证长期可用。）觉得有用欢迎点 **Star** ⭐
+**在线试用**：[EchoPass Demo](https://8.130.124.121:8765/)（自签 HTTPS 需「继续访问」；不保证长期可用。*服务器配置较省，公网访问可能略慢，见谅。*）觉得有用欢迎点 **Star** ⭐
 
 ![EchoPass 界面预览](docs/assets/echopass-ui-screenshot.png)
 
