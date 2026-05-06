@@ -2850,8 +2850,8 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
             state.vadNoiseFloor = state.vadNoiseFloor * 0.95 + rms * 0.05;
           }
           if (state.vadNoiseFloor < 0.003) state.vadNoiseFloor = 0.003;
-          // 动态阈值 = max(手动下限, 3 × 底噪)
-          const dynThresh = Math.max(manualThresh, state.vadNoiseFloor * 3);
+          // 动态阈值 = max(手动下限, 2.5 × 底噪)
+          const dynThresh = Math.max(manualThresh, state.vadNoiseFloor * 2.5);
           // worklet 约 100ms 一帧（frame.length ≈ 1600 @ 16k）
           const framesPerSec = rate / Math.max(1, frame.length);
           const silFrameThresh = Math.max(1, Math.ceil((silMs / 1000) * framesPerSec));
