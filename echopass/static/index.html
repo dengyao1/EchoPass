@@ -3147,6 +3147,14 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
     /** 轮询略密一些可更快命中唤醒词，略增 /api/kws 请求频率 */
     const KWS_WINDOW_SEC = 3, KWS_STEP_MS = 550;
     const WAKE_MAX_SEC = 10, WAKE_MIN_SEC = 1, WAKE_SIL_MS = 550;
+    /** 右栏点话筒：语音转文字填入输入框时的最长拾音秒数（独立于「小云小云」唤醒流水线） */
+    const MANUAL_CHAT_MAX_SEC = 18;
+    /** 右栏话筒：至少录满这么多秒才允许「静音→自动结束」；略大于唤醒，避免点按后未开口立刻结束 */
+    const MANUAL_CHAT_MIN_SEC = 1.75;
+    /** 右栏话筒：连续静音达到该时长才认为说完（仅影响点话筒，不影响「小云小云」） */
+    const MANUAL_CHAT_SIL_MS = 800;
+    /** 右栏话筒：开录后若干毫秒内不把静音算进「判停」，给人反应时间 */
+    const MANUAL_CHAT_START_GRACE_MS = 550;
     /**
      * 预制提示音 ended 之后再宽限的毫秒数：此间不按静音切段（原为 4s 体感很慢）。
      * 若以交互为先、能接受提示音回声进缓冲，可保持较小值。
@@ -3562,7 +3570,7 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       const elapsed = Date.now() - manualChatStartTs;
       const remain = Math.max(
         2000,
-        WAKE_MAX_SEC * 1000 - elapsed + WAKE_POST_ACK_GRACE_MS,
+        MANUAL_CHAT_MAX_SEC * 1000 - elapsed + WAKE_POST_ACK_GRACE_MS,
       );
       manualChatTimer = setTimeout(() => flushManualChat(true), remain);
     }
@@ -3620,14 +3628,15 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       const st = $('settingSilenceThresh');
       const silThresh = st ? (parseFloat(st.value) || 0.01) : 0.01;
       const framesPerSec = rate / Math.max(1, frame.length);
-      const silFrameThresh = Math.max(1, Math.ceil((WAKE_SIL_MS / 1000) * framesPerSec));
+      const silFrameThresh = Math.max(1, Math.ceil((MANUAL_CHAT_SIL_MS / 1000) * framesPerSec));
       const listenedSec = manualChatBuf.reduce((s, a) => s + a.length, 0) / rate;
       const inPostAckGrace = Date.now() < manualPostAckGraceUntil;
-      if (inPostAckGrace) {
+      const inStartGrace = (Date.now() - manualChatStartTs) < MANUAL_CHAT_START_GRACE_MS;
+      if (inPostAckGrace || inStartGrace) {
         manualSilenceFrames = 0;
       } else if (rms < silThresh) {
         manualSilenceFrames++;
-        if (manualSilenceFrames >= silFrameThresh && listenedSec >= WAKE_MIN_SEC) {
+        if (manualSilenceFrames >= silFrameThresh && listenedSec >= MANUAL_CHAT_MIN_SEC) {
           flushManualChat(false);
         }
       } else {
@@ -3640,9 +3649,9 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       if (manualChatTimer) { clearTimeout(manualChatTimer); manualChatTimer = null; }
       const total = manualChatBuf.reduce((s, a) => s + a.length, 0);
       const rate = sharedMic.sampleRate;
-      if (!force && total < rate * WAKE_MIN_SEC) {
+      if (!force && total < rate * MANUAL_CHAT_MIN_SEC) {
         manualChatPhase = 'LISTENING';
-        const remain = Math.max(1500, WAKE_MAX_SEC * 1000 - (Date.now() - manualChatStartTs));
+        const remain = Math.max(1500, MANUAL_CHAT_MAX_SEC * 1000 - (Date.now() - manualChatStartTs));
         manualChatTimer = setTimeout(() => flushManualChat(true), remain);
         return;
       }
@@ -3730,7 +3739,7 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
         toast('无法打开麦克风：' + (e && e.message ? e.message : '未知错误'), 4000);
         return;
       }
-      manualChatTimer = setTimeout(() => flushManualChat(true), WAKE_MAX_SEC * 1000);
+      manualChatTimer = setTimeout(() => flushManualChat(true), MANUAL_CHAT_MAX_SEC * 1000);
       playChatVoiceAck().catch(() => {});
     }
 
