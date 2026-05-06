@@ -4707,14 +4707,18 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       const useChatTts = $('settingWakeTtsEnabled').checked;
       const botIdx = state.chatMessages.length - 1;
       try {
-        if (useChatTts) await unlockTtsPlayback();
+        if (useChatTts) {
+          await unlockTtsPlayback();
+          setFabTtsState('playing');
+        }
         const r = await runAssistantStreamSse({
           userTxt: text,
           who: '我',
           sessionId: sid,
           meetingSessionId,
           useTts: useChatTts,
-          deferAudio: !!useChatTts,
+          /** 勿用 defer：否则会等 SSE 结束 + 打字机跑完才 playPcmB64Queue，字早出来了声音才迟到 */
+          deferAudio: false,
           onTextDelta: (full) => {
             const m = state.chatMessages[botIdx];
             if (m && m.role === 'bot') {
@@ -4735,13 +4739,16 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
           m.text = reply;
           m.typing = false;
         }
-        if (useChatTts && r.deferredPcm && r.deferredPcm.length) {
-          setFabTtsState('playing');
-          await playPcmB64Queue(r.deferredPcm);
-          setFabTtsState('done');
-        } else if (useChatTts && !r.usedStreamTts && reply && reply !== '（模型无回复）') {
-          setFabTtsState('playing');
-          await playTts(reply, sid);
+        if (useChatTts) {
+          if (r.usedStreamTts) {
+            setFabTtsState('done');
+          } else if (reply && reply !== '（模型无回复）') {
+            setFabTtsState('playing');
+            await playTts(reply, sid);
+            setFabTtsState('done');
+          } else {
+            setFabTtsState('off');
+          }
         }
       } catch (e) {
         clearChatTypewriter();
