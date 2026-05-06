@@ -3144,10 +3144,14 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
     let currentWakeAckAudio = null;
     /** 仅当配置了 wake_ack 音频时：在该段预制音播放结束（ended/error）后的宽限期内，不因静音切段（给你时间再开口） */
     let wakePostAckGraceUntil = 0;
-    const KWS_WINDOW_SEC = 3, KWS_STEP_MS = 1200;
-    const WAKE_MAX_SEC = 10, WAKE_MIN_SEC = 1, WAKE_SIL_MS = 700;
-    /** 预制提示音播完之后再宽限的毫秒数（语音唤醒场景：等「在的请说」结束后的几秒） */
-    const WAKE_POST_ACK_GRACE_MS = 4000;
+    /** 轮询略密一些可更快命中唤醒词，略增 /api/kws 请求频率 */
+    const KWS_WINDOW_SEC = 3, KWS_STEP_MS = 550;
+    const WAKE_MAX_SEC = 10, WAKE_MIN_SEC = 1, WAKE_SIL_MS = 550;
+    /**
+     * 预制提示音 ended 之后再宽限的毫秒数：此间不按静音切段（原为 4s 体感很慢）。
+     * 若以交互为先、能接受提示音回声进缓冲，可保持较小值。
+     */
+    const WAKE_POST_ACK_GRACE_MS = 450;
 
     function setFabState(kind, label) {
       const fab = $('fab');
@@ -3227,7 +3231,7 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       if (wakeListenTimer) clearTimeout(wakeListenTimer);
       const elapsed = Date.now() - wakeListenStartTs;
       const remain = Math.max(
-        4000,
+        2000,
         WAKE_MAX_SEC * 1000 - elapsed + WAKE_POST_ACK_GRACE_MS,
       );
       wakeListenTimer = setTimeout(() => flushWakeUtterance(true), remain);
@@ -3487,13 +3491,15 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
           clearFabTypewriter();
           $('fabUserText').textContent = txt;
           $('fabBubble').classList.add('show');
+          setFabTtsState('playing');
           const r = await runAssistantStreamSse({
             userTxt: txt,
             who,
             sessionId: sessionId,
             meetingSessionId,
             useTts: true,
-            deferAudio: true,
+            /** 打断「先打字机再等整段 PCM」：SSE 随到随播，与 FAB 字幕并行 */
+            deferAudio: false,
             onFabDelta: (full) => {
               fabTwTarget = full;
               ensureFabTypewriter();
@@ -3501,19 +3507,16 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
           });
           const reply = (r.fullText || '').trim();
           const replyShown = reply || '（模型无回复）';
-          fabTwTarget = replyShown;
-          ensureFabTypewriter();
-          await waitFabTypewriterDone();
           clearFabTypewriter();
           fabTwShown = replyShown;
+          fabTwTarget = replyShown;
           showFabBubble(txt, replyShown);
-          if (r.deferredPcm && r.deferredPcm.length) {
-            setFabTtsState('playing');
-            await playPcmB64Queue(r.deferredPcm);
+          if (r.usedStreamTts) {
             setFabTtsState('done');
-          } else if (!r.usedStreamTts && reply) {
+          } else if (reply) {
             setFabTtsState('playing');
             await playTts(reply, sessionId);
+            setFabTtsState('done');
           } else {
             setFabTtsState('off');
           }
@@ -3558,7 +3561,7 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       if (manualChatTimer) clearTimeout(manualChatTimer);
       const elapsed = Date.now() - manualChatStartTs;
       const remain = Math.max(
-        4000,
+        2000,
         WAKE_MAX_SEC * 1000 - elapsed + WAKE_POST_ACK_GRACE_MS,
       );
       manualChatTimer = setTimeout(() => flushManualChat(true), remain);
