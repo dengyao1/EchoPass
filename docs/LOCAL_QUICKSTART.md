@@ -4,6 +4,16 @@
 
 ---
 
+## 目录
+
+- [macOS / Linux](#macos--linux统一流程)
+- [Windows](#windows推荐-conda)
+- [必配项小结](#必配项小结复制-prodyaml-后必改)
+- [验证安装](#验证安装)
+- [故障排错](#故障排错)
+
+---
+
 ## macOS / Linux（统一流程）
 
 依赖 **Python 3.8**。推荐 **Miniconda/Anaconda**（macOS、Linux 均可）；也可自建 **venv**，只要 `python` 为 3.8 即可。
@@ -117,12 +127,61 @@ $env:FORCE_ONLINE = "1"
 
 ---
 
-## 故障与可选
+## 验证安装
 
-- **首启慢 / 预加载失败「火山」**：多为未填或填错 `asr.volc`，改后重启。  
-- **首启要拉模型**：用 `FORCE_ONLINE=1`；日常可去掉。  
-- **纪要一直空**：查 `llm` 三件套是否可访问。  
-- **ffmpeg**（部分音频更省事）：系统包管理器自行安装。  
-- **声纹用 PostgreSQL**：`requirements.txt` 默认不含驱动；需落库时安装 `psycopg2-binary` 并配 `speaker.pg_dsn`，见模板注释；Apple 硅 + Py3.8 下编译问题见 [README](../README.md) 或 TECHNICAL 文档。
+启动成功后，浏览器访问 `https://127.0.0.1:8765`，快速检查几个关键功能：
+
+1. **健康检查**：访问 `/api/health`，应返回 JSON 包含 `"ok": true, "asr_ready": true`
+2. **注册声纹**：设置抽屉 → 「录音注册」，说 3~5 秒话，名字出现在列表中
+3. **实时转写**：主界面点「开始录音」，说话后左侧出现转录气泡
+4. **生成纪要**：说几句话后，右侧「AI 纪要」点刷新
+
+---
+
+## 故障排错
+
+### 启动阶段
+
+**启动时报 modelscope 导入错误？**
+
+原因：modelscope >= 1.11 用了 Python 3.9+ 语法，3.8 会崩溃。解决：`pip install --force-reinstall --no-deps modelscope==1.10.0`
+
+**启动时卡在预加载很久？**
+
+首次需从 ModelScope 下载模型。确认网络能访问 modelscope.cn，用 `FORCE_ONLINE=1` 启动。
+
+**启动时报火山 ASR 凭据未配置？**
+
+在 `config/prod.yaml` 填写 `asr.volc.appid` 和 `asr.volc.token` 后重启。
+
+### 运行时问题
+
+**浏览器无法使用麦克风？**
+
+非 localhost 必须 HTTPS。`scripts/run.sh` 会自动生成自签证书，访问时点「高级 → 继续访问」。
+
+**转录结果为空？**
+
+检查 `/api/health` 中 `asr_ready` 状态；确认麦克风权限；确认说的中文；查看终端 ASR 日志。
+
+**纪要一直为空？**
+
+检查 LLM 三件套（api_url / api_key / model）是否可访问。可用 curl 测试连通性。LLM 不可用时会自动回退规则摘要。
+
+**声纹识别不准？**
+
+注册时说 3~5 秒以上；同设备同环境使用；可调低 `speaker.threshold`（默认 0.45）；多人会议可设参与者白名单。
+
+### 其他
+
+**Python 3.8 装 psycopg2 报错？**
+
+Apple Silicon 需要 `brew install libpq` 后设置 PATH。
+
+**能用 Python 3.9+ 吗？**
+
+不建议。依赖版本为 3.8 锁定，高版本需自行解决兼容问题。
+
+---
 
 更全的说明见 [README.md](../README.md)、[TECHNICAL_OVERVIEW.md](../TECHNICAL_OVERVIEW.md)。

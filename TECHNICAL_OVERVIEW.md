@@ -61,44 +61,62 @@
 
 ```text
 EchoPass/
-├── README.md                     # 入门说明
+├── README.md                     # 项目总览与快速开始
 ├── TECHNICAL_OVERVIEW.md         # 本文档
 ├── LICENSE                       # MIT
 ├── NOTICE                        # 第三方代码归属（3D-Speaker 等）
 ├── docs/
-│   └── LOCAL_QUICKSTART.md       # 各平台最短启动（macOS / Linux / Windows）
+│   ├── LOCAL_QUICKSTART.md       # 各平台最短启动（macOS / Linux / Windows）
+│   └── assets/
+│       └── echopass-ui-screenshot.png
 ├── config/
 │   └── prod.yaml.example         # 去敏配置模板；本地复制为 prod.yaml
 ├── environment.yml               # 可选：手动 conda env create 时参考（含 openssl）
-├── requirements.txt              # 运行依赖
+├── requirements.txt              # 运行依赖（精确版本锁定）
 ├── pyproject.toml                # 包元信息（可选，便于 pip install -e .）
 ├── scripts/
 │   ├── first-run.sh              # macOS/Linux：首次装依赖并生成 config/prod.yaml
 │   ├── first-run-windows.ps1     # Windows：首次装依赖
 │   ├── first-run-windows.bat
 │   ├── run.ps1                   # Windows 启动（与 run.sh 对齐）
-│   └── run.sh                    # macOS/Linux 启动脚本
+│   ├── run.sh                    # macOS/Linux 启动脚本
+│   └── gen_wake_ack_wavs.py      # 生成唤醒应答音效
 ├── sql/
 │   ├── schema.sql                # PostgreSQL 建表
 │   └── migrations/
 │       └── 001_rename_speaker_demo_enrollments.sql
+├── ssl/                          # 自签 HTTPS 证书
+├── pretrained/                   # CAM++ 权重缓存
+├── Dockerfile                    # Docker 镜像构建
 └── echopass/                     # Python 包
     ├── __init__.py
     ├── app.py                    # FastAPI 应用，汇总配置、接口、全局单例
-    ├── engine.py                 # 声纹、ASR、KWS 核心引擎
+    ├── config.py                 # 统一配置入口（env > yaml > default）
+    ├── engine.py                 # 声纹、ASR、LLM纠错、KWS 核心引擎
     ├── audio_features.py         # 最小化 FBank 特征提取
     ├── campplus_model.py         # 最小化 CAM++ 模型定义（源自 3D-Speaker）
+    ├── volc_asr.py               # 火山 v2 通用流式 ASR 客户端
+    ├── volc_bigmodel_asr.py      # 火山 v3 大模型 ASR 客户端（豆包 2.0）
+    ├── volc_bidirectional_tts.py # 火山双向流式 TTS V3 客户端
     ├── agent/
     │   ├── dialogue_manager.py   # 唤醒会话 TTL 管理
-    │   └── llm_client.py         # OpenAI-compatible 对话客户端
+    │   ├── llm_client.py         # OpenAI-compatible 对话客户端
+    │   └── participants.py       # 会议参与者白名单（按 session）
     ├── meeting/
     │   ├── transcript_buffer.py  # 转录缓存与去重拼接
-    │   └── summarizer.py         # 会议纪要生成
+    │   ├── summarizer.py         # 会议纪要生成 + AI 章节划分
+    │   └── cross_meeting.py      # 跨会议总结（预留实现）
+    ├── session/
+    │   └── manager.py            # 多会议会话注册表（TTL 自动清理）
     ├── transport/
     │   ├── websocket_server.py   # WebSocket 会话广播
     │   └── schemas.py            # 事件消息结构
     └── static/
-        └── index.html            # 单页前端界面
+        ├── index.html            # 单页前端界面（~5000 行）
+        ├── js/
+        │   ├── meeting-chapters.js  # 章节可视化
+        │   └── ui-theme.js          # 主题切换
+        └── audio/                # KWS 唤醒应答音效
 ```
 
 ## 4. 总体架构
@@ -139,20 +157,24 @@ FastAPI (app.py)
 
 主要全局对象：
 
-- `engine`: `CamPlusSpeakerEngine`
-- `asr_engine`: `StreamingASREngine`
-- `llm_corrector`: `LLMCorrector`
-- `llm_chat`: `LLMChatClient`
-- `kws_engine`: `KWSEngine`
-- `ws_hub`: `WebSocketHub`
-- `transcript_buffer`: `TranscriptBuffer`
-- `dialogue_manager`: `DialogueManager`
-- `meeting_summarizer`: `MeetingSummarizer`
+- `engine`: `CamPlusSpeakerEngine` — 声纹注册与识别
+- `asr_engine`: `StreamingASREngine` — 火山云端流式 ASR
+- `llm_corrector`: `LLMCorrector` — ASR 文本 LLM 纠错
+- `llm_chat`: `LLMChatClient` — LLM 对话客户端
+- `kws_engine`: `KWSEngine` — 关键词唤醒
+- `ws_hub`: `WebSocketHub` — WebSocket 广播
+- `transcript_buffer`: `TranscriptBuffer` — 转录缓存
+- `dialogue_manager`: `DialogueManager` — 唤醒对话态管理
+- `meeting_summarizer`: `MeetingSummarizer` — 纪要/章节生成
+- `cross_meeting_summarizer`: `CrossMeetingSummarizer` — 跨会议总结（预留）
+- `session_manager`: `SessionManager` — 多会议会话生命周期
+- `participants_registry`: `ParticipantsRegistry` — 参与者白名单
 
 补充说明：
 
 - 模块启动时会尝试关闭 `tqdm` 进度条，避免 FunASR 在服务日志里刷屏。
 - 路由中大量使用 `session_id` 作为会话隔离键。
+- 支持模型预加载（`on_event("startup")`），默认开启，可通过 `preload_models: false` 关闭。
 
 ### 5.2 `engine.py`
 
@@ -192,13 +214,25 @@ FastAPI (app.py)
 - 输出 `(triggered, score, raw_result)`
 - 内部适配多种 FunASR 返回格式
 
-### 5.3 `audio_features.py`
+### 5.3 `config.py`
+
+统一配置入口，实现**环境变量 > YAML > 内置默认值**的三级优先级。
+
+核心函数 `cfg(path, env, default, cast)`：
+- `path`：YAML 中的点分路径（如 `"asr.volc.appid"`）
+- `env`：对应的环境变量名（如 `"SPEAKER_VOLC_ASR_APPID"`）
+- `default`：回退默认值
+- `cast`：可选的类型转换函数（如 `int`、`float`、`to_bool`）
+
+配置文件加载顺序：`ECHOPASS_CONFIG` 环境变量指定路径 → `config/prod.yaml`（若存在）→ `config/prod.yaml.example`。
+
+### 5.4 `audio_features.py`
 
 - 提供最小版 `FBank`
 - 基于 `torchaudio.compliance.kaldi.fbank`
 - 用于 CAM++ 前处理
 
-### 5.4 `campplus_model.py`
+### 5.5 `campplus_model.py`
 
 - 提供最小版 CAM++ 模型结构
 - 仅保留推理所需的网络定义（剥离 speakerlab 训练栈）
@@ -208,7 +242,34 @@ FastAPI (app.py)
   - StatsPool
   - 最终 embedding 投影层
 
-### 5.5 `agent/dialogue_manager.py`
+### 5.6 `volc_asr.py`
+
+火山引擎 v2 通用流式 ASR 客户端（`/api/v2/asr`）。
+
+- 每次调用 = 一次独立 WebSocket 会话
+- 协议：自定义二进制帧（full client request → audio-only 分片 → 末帧 NEG_SEQUENCE → 收文本）
+- 独立事件循环线程，与 FastAPI 主 loop 解耦
+- 面向 `StreamingASREngine` 的内部实现，业务代码不直接使用
+
+### 5.7 `volc_bigmodel_asr.py`
+
+火山引擎 v3 大模型 ASR 客户端（豆包流式 2.0，`/api/v3/sauc/bigmodel`）。
+
+- 与 v2 主要差异：鉴权走 Headers（X-Api-App-Key 等），帧结构多 4 字节 seq，支持热词直传
+- 大模型版边发边收，小分片（默认 200ms），适合实时语音
+- 同样独立事件循环线程，同步接口 `transcribe_pcm16k()`
+
+### 5.8 `volc_bidirectional_tts.py`
+
+火山豆包双向流式 TTS V3 客户端。
+
+- 提供两种接口：
+  - `synthesize_pcm_bytes_sync()` — 同步整段合成（用于 `/api/tts`）
+  - `BidirectionalTtsStreamSession` — 流式合成（用于 `/api/assistant/stream` 的 LLM+TTS 联动）
+- 协议事件：StartSession → TaskRequest → FinishSession，下行收 PCM 分片
+- 支持语速、音量调节
+
+### 5.9 `agent/dialogue_manager.py`
 
 - 管理唤醒后的短时“助手会话”
 - 为每个 `session_id` 维护 TTL
@@ -223,14 +284,23 @@ FastAPI (app.py)
 - 限制唤醒后的助手有效时间
 - 给前端和接口一个“当前是否处于助手态”的判断依据
 
-### 5.6 `agent/llm_client.py`
+### 5.10 `agent/participants.py`
+
+会议参与者白名单管理器（按 `session_id`）。
+
+- 声纹库全局共享，但可在每场会议设置「只识别这些人」
+- 白名单为空时不过滤（默认行为）
+- 支持设置/增量添加/删除/清空
+- 在 `recognize_pcm` 等识别接口中打分后做二次过滤
+
+### 5.11 `agent/llm_client.py`
 
 - 最小 OpenAI-compatible 文本对话客户端
 - 用于：
   - 唤醒助手回复
   - 会议纪要生成
 
-### 5.7 `meeting/transcript_buffer.py`
+### 5.12 `meeting/transcript_buffer.py`
 
 - 以 `session_id` 为键保存转录记录
 - 记录字段：
@@ -245,22 +315,42 @@ FastAPI (app.py)
 - 对连续同一说话人发言做重叠文本去重拼接
 - 给纪要模块提供结构化上下文
 
-### 5.8 `meeting/summarizer.py`
+### 5.13 `meeting/summarizer.py`
 
 - 会议纪要生成器
 - 优先走 LLM
 - 失败时回退到规则摘要
 
-统一输出结构：
+统一输出结构（模块化报告式 JSON）：
 
-- `title`
-- `summary`
-- `key_points`
-- `decisions`
-- `action_items`
-- `risks`
+- `title` / `summary` — 标题与导语
+- `background` — 会议背景归纳（2~5 句）
+- `modules[]` — 编号模块卡片（bullets/table/actions/callout 四种类型）
+- `key_points` / `decisions` / `action_items` / `risks` — 兼容旧字段
 
-### 5.9 `transport/websocket_server.py`
+章节划分（`chapters()`）：
+- LLM 按话题变化切分，每章含标题、2-4 句摘要、起止时间、说话人列表
+- 后处理自动合并时间重叠/过短微章
+- LLM 不可用时回退规则切分（静默 gap > 90s 或 max > 3min）
+
+### 5.14 `meeting/cross_meeting.py`
+
+跨会议总结模块（预留实现）。当前为 stub 状态：
+
+- 接受多场 `CrossMeetingRef`，返回与单场兼容的空壳 JSON
+- `cross_meeting_meta.implementation = "stub"` 标记未接入 LLM
+- 接入 LLM 后需实现的步骤已写在代码 TODO 中
+
+### 5.15 `session/manager.py`
+
+多会议会话注册表（进程内单例）。
+
+- 按 `session_id` 持有 `MeetingSession`（标签、创建时间、活跃时间、参与者集合）
+- TTL 自动清理长时间无心跳的会话（默认 4 小时）
+- 与 transcript / chat history / dialogue 等按 session 分桶的存储协同
+- `stop` 时由 app 层调用对应的 clear 清理关联数据
+
+### 5.16 `transport/websocket_server.py`
 
 - 管理 WebSocket 连接
 - 以 `session_id` 分组广播
@@ -269,7 +359,7 @@ FastAPI (app.py)
   - 向 `global` 会话附带广播
   - 发送失败连接自动清理
 
-### 5.10 `transport/schemas.py`
+### 5.17 `transport/schemas.py`
 
 - 统一 WebSocket 事件消息结构
 - 格式：
@@ -283,7 +373,7 @@ FastAPI (app.py)
 }
 ```
 
-### 5.11 `static/index.html`
+### 5.18 `static/index.html`
 
 前端是一个单文件 SPA，包含四块主要能力：
 
@@ -389,21 +479,30 @@ FastAPI (app.py)
 
 ### 8.1 REST API
 
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| GET | `/api/health` | 获取服务健康状态、模型加载状态、已注册人数 |
-| GET | `/api/speakers` | 获取已注册说话人列表 |
-| POST | `/api/enroll` | 注册声纹，表单上传音频 |
-| DELETE | `/api/speakers/{name}` | 删除已注册说话人 |
-| POST | `/api/identify_file` | 文件级说话人识别 |
-| POST | `/api/identify_pcm` | 原始 PCM 说话人识别 |
-| POST | `/api/recognize_pcm` | 原始 PCM 说话人识别 + ASR |
-| POST | `/api/asr_reset` | 重置当前会话转录缓存 |
-| POST | `/api/kws` | 唤醒词检测 |
-| POST | `/api/assistant/reply` | 生成助手回复 |
-| POST | `/api/meeting/summary` | 生成会议纪要 |
-| GET | `/api/meeting/transcript` | 获取当前会话转录明细 |
-| POST | `/api/tts` | 转发到外部 TTS 服务 |
+| 方法 | 路径 | 关键参数 | 说明 |
+| --- | --- | --- | --- |
+| `GET` | `/api/health` | — | 服务健康状态、模型加载状态、已注册人数、配置摘要 |
+| `GET` | `/api/speakers` | — | 已注册说话人列表 |
+| `POST` | `/api/enroll` | `name`(form), `audio`(file) | 注册说话人声纹 |
+| `DELETE` | `/api/speakers/{name}` | — | 删除已注册说话人 |
+| `POST` | `/api/identify_file` | `audio`(file), `threshold?`, `session_id?` | 上传文件识别说话人 |
+| `POST` | `/api/identify_pcm` | `sample_rate`, `threshold?`, `session_id?` | 原始 float32 PCM 识别说话人 |
+| `POST` | `/api/recognize_pcm` | `sample_rate`, `session_id`, `is_final?`, `threshold?`, `hotword?`, `offset_ms?` | **核心** — 说话人识别 + ASR 转写 |
+| `POST` | `/api/asr_reset` | `session_id?` | 重置 ASR 会话和转录缓存 |
+| `POST` | `/api/kws` | `sample_rate`, `session_id?` | 唤醒词检测（需 `kws.enabled: true`） |
+| `POST` | `/api/tts` | `{"text","voice?","session_id?","provider?"}` | 文本转语音（OpenAI 兼容 / 火山双向流式） |
+| `POST` | `/api/assistant/reply` | `{"text","session_id?","speaker?","use_tts?","meeting_session_id?"}` | 会中助手问答（非流式） |
+| `POST` | `/api/assistant/stream` | 同上 | 会中助手流式 SSE（LLM 流式 + TTS 联动） |
+| `POST` | `/api/meeting/summary` | `{"session_id?","title?"}` | 生成模块化会议纪要 JSON |
+| `POST` | `/api/meeting/summary/cross` | `{"meetings":[...],"title?","focus?"}` | 跨会议总结（预留） |
+| `POST` | `/api/meeting/chapters` | `{"session_id?"}` | 生成 AI 章节列表 |
+| `GET` | `/api/meeting/transcript` | `session_id?` | 获取当前会话转录明细 |
+| `POST` | `/api/meeting/export` | `audio`(file), `transcript_json`(form), `summary_json`(form), `title?`(form), `session_id?`(form) | 导出 ZIP（音频 + 转录 + 纪要 Markdown） |
+| `GET` | `/api/meeting/participants` | `session_id` | 获取会议参与者白名单 |
+| `POST` | `/api/meeting/participants` | `{"session_id","names":[...]}` | 设置参与者白名单 |
+| `GET` | `/api/meeting/sessions` | — | 列出所有活跃会议会话 |
+| `POST` | `/api/meeting/sessions/start` | `{"session_id","label?"}` | 启动会议会话 |
+| `POST` | `/api/meeting/sessions/stop` | `{"session_id"}` | 停止会议会话（清理转录/白名单/对话态） |
 
 ### 8.2 WebSocket
 
@@ -445,19 +544,28 @@ FastAPI (app.py)
 | `SPEAKER_DEMO_MODEL_ID` | `iic/speech_campplus_sv_zh-cn_16k-common` | CAM++ 模型 ID |
 | `SPEAKER_DEMO_PG_DSN` | `""`（默认配置模板中为空） | 为空字符串时只用内存，不做声纹持久化 |
 
-### 9.2 ASR / KWS
+### 9.2 ASR / KWS / 会话
 
-| 环境变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `SPEAKER_VOLC_ASR_APPID` | `""`（未配置时启动/预加载会报错或无法拉流式 ASR） | 火山引擎 openspeech 项目 appid |
-| `SPEAKER_VOLC_ASR_TOKEN` | 同上 | 火山引擎 openspeech 项目 token |
-| `SPEAKER_VOLC_ASR_CLUSTER` | 依 `asr.volc.api` 而定 | 仅 **common** 流式需要；**bigmodel** 可不配置 |
-| `SPEAKER_VOLC_ASR_WS_URL` | `wss://openspeech.bytedance.com/api/v2/asr` | WebSocket 地址 |
-| `SPEAKER_VOLC_ASR_LANGUAGE` | `zh-CN` | 识别语言 |
-| `SPEAKER_VOLC_ASR_WORKFLOW` | `audio_in,resample,partition,vad,fe,decode,itn,nlu_punctuate` | 引擎 workflow 串 |
-| `SPEAKER_VOLC_ASR_UID` | `echopass` | 请求 uid |
-| `SPEAKER_VOLC_ASR_SEG_MS` | `15000` | 单片最大毫秒数（单次请求内再切分） |
-| `SPEAKER_FUNASR_BASE` | `<repo>/pretrained/funasr` | KWS 本地权重目录（ASR 已云端化，无需 ASR 权重） |
+| 环境变量 | YAML 路径 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `SPEAKER_VOLC_ASR_APPID` | `asr.volc.appid` | `""` | 火山 ASR AppID（**必配**） |
+| `SPEAKER_VOLC_ASR_TOKEN` | `asr.volc.token` | `""` | 火山 ASR Access Token（**必配**） |
+| `SPEAKER_VOLC_ASR_API` | `asr.volc.api` | `bigmodel` | ASR 版本：`bigmodel`（豆包2.0）或 `common`（通用版） |
+| `SPEAKER_VOLC_ASR_CLUSTER` | `asr.volc.cluster` | `volcengine_streaming_common` | 仅 common 版需要 |
+| `SPEAKER_VOLC_ASR_WS_URL` | `asr.volc.ws_url` | 按 api 自动选 | WebSocket 地址 |
+| `SPEAKER_VOLC_ASR_RESOURCE_ID` | `asr.volc.resource_id` | `volc.bigasr.sauc.duration` | 仅 bigmodel 版使用 |
+| `SPEAKER_VOLC_ASR_MODEL_NAME` | `asr.volc.model_name` | `bigmodel` | 仅 bigmodel 版使用 |
+| `SPEAKER_VOLC_ASR_LANGUAGE` | `asr.volc.language` | `zh-CN` | 识别语言 |
+| `SPEAKER_VOLC_ASR_WORKFLOW` | `asr.volc.workflow` | `audio_in,resample,...` | 引擎 workflow 串（仅 common） |
+| `SPEAKER_VOLC_ASR_UID` | `asr.volc.uid` | `echopass` | 请求 uid |
+| `SPEAKER_VOLC_ASR_SEG_MS` | `asr.volc.seg_ms` | 200(bigmodel) / 15000(common) | 单片最大毫秒数 |
+| `SPEAKER_ASR_MAX_CONCURRENT` | `asr.max_concurrent` | `32` | 进程内并发 ASR 连接上限（0=不限制） |
+| `SPEAKER_ASR_HOTWORD` | `asr.hotword` | `""` | 全局 ASR 热词（空格分隔），前端 query 参数优先级更高 |
+| `SPEAKER_FUNASR_BASE` | `asr.funasr_base` | `<repo>/pretrained/funasr` | KWS 本地权重目录 |
+| `SPEAKER_SESSION_TTL_SEC` | `session.ttl_sec` | `14400`（4h） | 会议会话 TTL |
+| `SPEAKER_CHAPTER_PROMPT_LINES` | `meeting.chapters.prompt_max_lines` | `120` | 章节 LLM prompt 最大转写条数 |
+| `SPEAKER_CROSS_SUMMARY_MAX_MEETINGS` | `meeting.cross_summary.max_meetings` | `20` | 跨会议总结单次最大会议数 |
+| `SPEAKER_PRELOAD_MODELS` | `preload_models` | `true` | 启动时是否预加载模型 |
 
 ### 9.3 LLM
 
@@ -481,16 +589,33 @@ FastAPI (app.py)
 
 ### 9.5 TTS
 
-| 环境变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `SPEAKER_TTS_URL` | `""` | HTTP 类 TTS 的 base URL；未配且非火山 TTS 时 TTS 不可用 |
-| `SPEAKER_TTS_API_KEY` | `none` | OpenAI-compatible TTS Key |
-| `SPEAKER_TTS_VOICE` | `default` | TTS voice |
-| `SPEAKER_TTS_MODEL` | `tts-1` | TTS model |
-| `SPEAKER_TTS_PROVIDER` | `volc_bidirection` | `openai` 或 `volc_bidirection` |
-| `SPEAKER_TTS_PCM_SAMPLE_RATE` | `24000` | PCM 转 WAV 采样率 |
-| `SPEAKER_TTS_PCM_CHANNELS` | `1` | PCM 声道数 |
-| `SPEAKER_TTS_PCM_SAMPLE_WIDTH` | `2` | PCM 采样字节宽度 |
+| 环境变量 | YAML 路径 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `SPEAKER_TTS_PROVIDER` | `tts.provider` | `volc_bidirection` | `openai` 或 `volc_bidirection` |
+| `SPEAKER_TTS_URL` | `tts.url` | `""` | HTTP 类 TTS 的 base URL（openai 模式必配） |
+| `SPEAKER_TTS_API_KEY` | `tts.api_key` | `none` | TTS API Key（openai 模式） |
+| `SPEAKER_TTS_VOICE` | `tts.voice` | `zh_female_vv_uranus_bigtts` | 兜底音色（请求体 voice 优先） |
+| `SPEAKER_TTS_MODEL` | `tts.model` | `tts-1` | TTS 模型（仅 openai 模式） |
+| `SPEAKER_TTS_PCM_SAMPLE_RATE` | `tts.pcm.sample_rate` | `24000` | PCM 转 WAV 采样率 |
+| `SPEAKER_TTS_PCM_CHANNELS` | `tts.pcm.channels` | `1` | PCM 声道数 |
+| `SPEAKER_TTS_PCM_SAMPLE_WIDTH` | `tts.pcm.sample_width` | `2` | PCM 采样字节宽度 |
+| `SPEAKER_TTS_VOLC_WS_URL` | `tts.volc.ws_url` | `wss://openspeech.bytedance.com/api/v3/tts/bidirection` | 火山 TTS WebSocket 地址 |
+| `SPEAKER_TTS_VOLC_APPID` | `tts.volc.appid` | 沿用 `asr.volc.appid` | 火山 TTS AppID |
+| `SPEAKER_TTS_VOLC_ACCESS_KEY` | `tts.volc.access_key` | 沿用 `asr.volc.token` | 火山 TTS Access Key |
+| `SPEAKER_TTS_VOLC_RESOURCE_ID` | `tts.volc.resource_id` | `seed-tts-2.0` | 资源 ID（2.0 音色；1.0 公版用 `volc.service_type.10029`） |
+| `SPEAKER_TTS_VOLC_SPEAKER` | `tts.volc.speaker` | `zh_female_vv_uranus_bigtts` | 豆包音色 ID（控制台复制） |
+| `SPEAKER_TTS_VOLC_SPEECH_RATE` | `tts.volc.speech_rate` | `0` | 语速 -50~100 |
+| `SPEAKER_TTS_VOLC_LOUDNESS_RATE` | `tts.volc.loudness_rate` | `0` | 音量 -50~100 |
+
+### 9.6 会中助手
+
+| 环境变量 | YAML 路径 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `SPEAKER_ASSISTANT_TTL_SEC` | `assistant.ttl_sec` | `25` | 唤醒后对话态 TTL（秒） |
+| `SPEAKER_ASSISTANT_CHAT_TURNS` | `assistant.chat_history_turns` | `8` | 多轮对话保留轮数（0=关闭记忆） |
+| `SPEAKER_WAKE_ACK_AUDIO` | `assistant.wake_ack_audio` | `""` | 唤醒应答音效路径（相对 static/） |
+| `SPEAKER_MEETING_CTX_ITEMS` | `assistant.meeting_ctx.max_items` | `20` | 助手附带的最近会议发言条数 |
+| `SPEAKER_MEETING_CTX_CHARS` | `assistant.meeting_ctx.max_chars` | `1500` | 助手附带的最近会议发言最大字符数 |
 
 ## 10. 依赖说明
 
