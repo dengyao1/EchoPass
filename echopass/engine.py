@@ -347,7 +347,7 @@ class StreamingASREngine:
     """
 
     DEFAULT_API = "bigmodel"  # "bigmodel"（推荐）或 "common"
-    DEFAULT_WS_URL_BIGMODEL = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel"
+    DEFAULT_WS_URL_BIGMODEL = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async"
     DEFAULT_WS_URL_COMMON = "wss://openspeech.bytedance.com/api/v2/asr"
     DEFAULT_RESOURCE_ID = "volc.bigasr.sauc.duration"
     DEFAULT_MODEL_NAME = "bigmodel"
@@ -369,7 +369,7 @@ class StreamingASREngine:
         self._client = None
 
         # 配置来源优先级：环境变量 > config/*.yaml > 类内置默认
-        from echopass.config import cfg
+        from echopass.config import cfg, to_bool
 
         api = cfg("asr.volc.api", "SPEAKER_VOLC_ASR_API", self.DEFAULT_API,
                   lambda v: str(v).strip().lower())
@@ -397,6 +397,18 @@ class StreamingASREngine:
         seg_raw = cfg("asr.volc.seg_ms", "SPEAKER_VOLC_ASR_SEG_MS", 0, int)
         # 0/None 都视为"未设置，按 api 选默认"
         self._seg_ms = seg_raw if (seg_raw and seg_raw > 0) else default_seg
+        self._volc_enable_punc = cfg(
+            "asr.volc.enable_punc", "SPEAKER_VOLC_ASR_ENABLE_PUNC", True, to_bool,
+        )
+        self._volc_enable_nonstream = cfg(
+            "asr.volc.enable_nonstream", "SPEAKER_VOLC_ASR_ENABLE_NONSTREAM", False, to_bool,
+        )
+        self._volc_enable_itn = cfg(
+            "asr.volc.enable_itn", "SPEAKER_VOLC_ASR_ENABLE_ITN", True, to_bool,
+        )
+        self._volc_enable_ddc = cfg(
+            "asr.volc.enable_ddc", "SPEAKER_VOLC_ASR_ENABLE_DDC", True, to_bool,
+        )
 
         # 高并发：不再用单把全局锁串行所有会议。改为「每 session 一把锁」避免同一会话
         # 多段 PCM 并发乱序；再用全局 BoundedSemaphore 限制进程内同时进行中的火山 WS 数。
@@ -472,6 +484,10 @@ class StreamingASREngine:
                 model_name=self._model_name,
                 uid=self._uid,
                 seg_duration_ms=self._seg_ms,
+                enable_punc=self._volc_enable_punc,
+                enable_nonstream=self._volc_enable_nonstream,
+                enable_itn=self._volc_enable_itn,
+                enable_ddc=self._volc_enable_ddc,
             )
         else:
             if not self._cluster:

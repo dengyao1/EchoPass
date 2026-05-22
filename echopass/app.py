@@ -201,6 +201,12 @@ llm_chat = LLMChatClient(
 _kws_enabled = cfg("kws.enabled", "SPEAKER_KWS_ENABLED", False, to_bool)
 _kws_keywords = cfg("kws.keywords", "SPEAKER_KWS_KEYWORDS", "小云小云", str)
 _kws_threshold = cfg("kws.threshold", "SPEAKER_KWS_THRESHOLD", 0.75, float)
+_VAD_SILENCE_MS = cfg("meeting.vad.silence_ms", "SPEAKER_VAD_SILENCE_MS", 500, int)
+_VAD_MIN_SEC = cfg("meeting.vad.min_sec", "SPEAKER_VAD_MIN_SEC", 2.5, float)
+_VAD_MAX_SEC = cfg("meeting.vad.max_sec", "SPEAKER_VAD_MAX_SEC", 8.0, float)
+_VAD_SILENCE_THRESH = cfg(
+    "meeting.vad.silence_thresh_rms", "SPEAKER_VAD_SILENCE_THRESH", 0.01, float,
+)
 kws_engine = KWSEngine(
     keywords=_kws_keywords, threshold=_kws_threshold, enabled=_kws_enabled
 )
@@ -586,6 +592,12 @@ def health():
         "speakers": engine.list_speakers(),
         # 相对 echopass/static/，如 audio/wake_ack.mp3；空表示不播放
         "wake_ack_audio": _wake_ack_audio,
+        "vad": {
+            "silence_ms": int(_VAD_SILENCE_MS),
+            "min_sec": float(_VAD_MIN_SEC),
+            "max_sec": float(_VAD_MAX_SEC),
+            "silence_thresh_rms": float(_VAD_SILENCE_THRESH),
+        },
     }
 
 

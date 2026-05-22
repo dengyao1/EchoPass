@@ -105,7 +105,7 @@ flowchart TB
 
 核心流程说明：
 
-1. **前端** 通过浏览器采集麦克风音频，本地 RMS 阈值做简单 VAD 切句
+1. **前端** 通过浏览器采集麦克风音频，RMS + 动态底噪 + 滞回 VAD 切句（参数可由 `meeting.vad` 配置）
 2. **每段音频** 发送到后端，并行执行声纹识别（CAM++）和语音转写（火山 ASR）
 3. **转录结果** 写入 TranscriptBuffer，同一说话人的连续发言自动去重合并
 4. **实时推送** 通过 WebSocket 将识别结果实时推送给前端展示
@@ -204,6 +204,9 @@ FORCE_ONLINE=1 ./scripts/run.sh
 | `tts.provider` | TTS 后端：`volc_bidirection`（火山双向流式）或 `openai` |
 | `tts.volc.speaker` | 豆包 TTS 音色 ID |
 | `asr.volc.api` | ASR 版本：`bigmodel`（豆包 2.0，推荐）或 `common`（通用版） |
+| `asr.volc.ws_url` | 留空默认 `bigmodel_async`；回滚可设 `.../sauc/bigmodel` |
+| `asr.volc.enable_punc` / `enable_itn` / `enable_ddc` | 大模型 ASR 后处理开关（见 `prod.yaml.example`） |
+| `meeting.vad.*` | 会议录音 VAD 默认（静音 500ms 等），由 `/api/health` 同步到前端 |
 | `asr.max_concurrent` | 并发 ASR 连接上限（默认 32） |
 | `preload_models: false` | 关闭启动时模型预加载（加快调试重启速度） |
 

@@ -24,6 +24,12 @@ assistant:
 
 # AI 章节：按话题切分 + 标题/摘要（见 echopass/meeting/summarizer.py）
 meeting:
+  # 会议录音前端 VAD 默认值（/api/health 下发，设置抽屉可覆盖）
+  vad:
+    silence_ms: 500
+    min_sec: 2.5
+    max_sec: 8
+    silence_thresh_rms: 0.01
   chapters:
     # 喂给章节 LLM 的最大转写条数（40~200）；长会可适当增大，注意 token 与超时
     prompt_max_lines: 120
@@ -60,6 +66,11 @@ asr:
     workflow: ""
     uid: ""
     seg_ms: 0
+    # 留空 ws_url 时默认 bigmodel_async；回滚同步版可设 wss://.../api/v3/sauc/bigmodel
+    enable_punc: true
+    enable_nonstream: false
+    enable_itn: true
+    enable_ddc: true
 
 kws:
   # 默认 false：不预加载/不下载本地 CTC 唤醒词模型。要用「小云小云」语音唤醒时改为 true

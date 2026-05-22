@@ -552,8 +552,16 @@ FastAPI (app.py)
 | `SPEAKER_VOLC_ASR_TOKEN` | `asr.volc.token` | `""` | 火山 ASR Access Token（**必配**） |
 | `SPEAKER_VOLC_ASR_API` | `asr.volc.api` | `bigmodel` | ASR 版本：`bigmodel`（豆包2.0）或 `common`（通用版） |
 | `SPEAKER_VOLC_ASR_CLUSTER` | `asr.volc.cluster` | `volcengine_streaming_common` | 仅 common 版需要 |
-| `SPEAKER_VOLC_ASR_WS_URL` | `asr.volc.ws_url` | 按 api 自动选 | WebSocket 地址 |
+| `SPEAKER_VOLC_ASR_WS_URL` | `asr.volc.ws_url` | `bigmodel_async`（v3） | WebSocket 地址；留空即用默认 `.../sauc/bigmodel_async` |
 | `SPEAKER_VOLC_ASR_RESOURCE_ID` | `asr.volc.resource_id` | `volc.bigasr.sauc.duration` | 仅 bigmodel 版使用 |
+| `SPEAKER_VOLC_ASR_ENABLE_PUNC` | `asr.volc.enable_punc` | `true` | 大模型 ASR 自动标点 |
+| `SPEAKER_VOLC_ASR_ENABLE_NONSTREAM` | `asr.volc.enable_nonstream` | `false` | 非流式整段识别（长段更稳，延迟更高） |
+| `SPEAKER_VOLC_ASR_ENABLE_ITN` | `asr.volc.enable_itn` | `true` | 逆文本归一化 |
+| `SPEAKER_VOLC_ASR_ENABLE_DDC` | `asr.volc.enable_ddc` | `true` | 顺滑（DDC） |
+| `SPEAKER_VAD_SILENCE_MS` | `meeting.vad.silence_ms` | `500` | 前端 VAD 静音判停（ms），`/api/health` 下发 |
+| `SPEAKER_VAD_MIN_SEC` | `meeting.vad.min_sec` | `2.5` | 最短送 ASR 段长（秒） |
+| `SPEAKER_VAD_MAX_SEC` | `meeting.vad.max_sec` | `8` | 最长累计段长（秒） |
+| `SPEAKER_VAD_SILENCE_THRESH` | `meeting.vad.silence_thresh_rms` | `0.01` | RMS 静音下限 |
 | `SPEAKER_VOLC_ASR_MODEL_NAME` | `asr.volc.model_name` | `bigmodel` | 仅 bigmodel 版使用 |
 | `SPEAKER_VOLC_ASR_LANGUAGE` | `asr.volc.language` | `zh-CN` | 识别语言 |
 | `SPEAKER_VOLC_ASR_WORKFLOW` | `asr.volc.workflow` | `audio_in,resample,...` | 引擎 workflow 串（仅 common） |

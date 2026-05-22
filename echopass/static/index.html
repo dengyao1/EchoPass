@@ -2081,11 +2081,12 @@
           <label>静音触发阈值（RMS）</label>
           <input type="number" id="settingSilenceThresh" value="0.01" min="0.001" max="0.1" step="0.001" />
           <label>静音持续（毫秒）</label>
-          <input type="number" id="settingSilenceMs" value="1000" min="200" max="2000" step="100" />
+          <input type="number" id="settingSilenceMs" value="500" min="200" max="2000" step="100" />
           <label>最短触发长度（秒）</label>
           <input type="number" id="settingMinLen" value="2.5" min="0.5" max="5" step="0.5" />
           <label>最长累计长度（秒）</label>
           <input type="number" id="settingMaxLen" value="8" min="3" max="20" step="1" />
+          <p id="vadConfigHint" style="margin:0.35rem 0 0;font-size:0.75rem;color:var(--muted);"></p>
         </details>
       </section>
     </div>
@@ -2423,6 +2424,7 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       currentSpeakerHint: '', // 最近一次已完成气泡的发言人
 
       // 动态 VAD
+      vadDefaults: null,      // /api/health 下发的 meeting.vad
       vadNoiseFloor: 0.006, // EMA 估计的背景底噪 RMS
       vadIsSpeech: false,   // 上一帧是否判为有声
 
@@ -2462,8 +2464,9 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
     };
     const MAX_RECORD_SEC = 6 * 60 * 60; // 06:00:00 上限
     const SUMMARY_DEBOUNCE_MS = 8000;
-    // 上段尾部回溯已关闭（原 0.8s 会与服务端 VAD 重叠，造成首字重复）
-    const TAIL_SEC = 0;
+    // 切段时保留上段尾部 0.25s，减轻句首丢字
+    const TAIL_SEC = 0.25;
+    const VAD_SILENCE_EXIT_MULT = 0.44;
 
     // ═══════════════════════════════════════════════════
     // 3) 顶部栏：日期时间 + 保存状态 + 导出
@@ -2681,12 +2684,36 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
     // ═══════════════════════════════════════════════════
     function getVadParams() {
       const rate = sharedMic.sampleRate; // 固定 16000
+      const d = state.vadDefaults || {};
       return {
-        thresh:    parseFloat($('settingSilenceThresh').value) || 0.01,
-        silMs:     parseInt($('settingSilenceMs').value)       || 1000,
-        minSamples: (parseFloat($('settingMinLen').value) || 2.5) * rate,
-        maxSamples: (parseFloat($('settingMaxLen').value) || 8)   * rate,
+        thresh: parseFloat($('settingSilenceThresh').value) || d.silence_thresh_rms || 0.01,
+        silMs: parseInt($('settingSilenceMs').value, 10) || d.silence_ms || 500,
+        minSamples: (parseFloat($('settingMinLen').value) || d.min_sec || 2.5) * rate,
+        maxSamples: (parseFloat($('settingMaxLen').value) || d.max_sec || 8) * rate,
       };
+    }
+    function applyVadConfigFromHealth(vad) {
+      if (!vad || typeof vad !== 'object') return;
+      state.vadDefaults = {
+        silence_ms: Number(vad.silence_ms) || 500,
+        min_sec: Number(vad.min_sec) || 2.5,
+        max_sec: Number(vad.max_sec) || 8,
+        silence_thresh_rms: Number(vad.silence_thresh_rms) || 0.01,
+      };
+      const thEl = $('settingSilenceThresh');
+      const silEl = $('settingSilenceMs');
+      const minEl = $('settingMinLen');
+      const maxEl = $('settingMaxLen');
+      if (thEl) thEl.value = String(state.vadDefaults.silence_thresh_rms);
+      if (silEl) silEl.value = String(state.vadDefaults.silence_ms);
+      if (minEl) minEl.value = String(state.vadDefaults.min_sec);
+      if (maxEl) maxEl.value = String(state.vadDefaults.max_sec);
+      const hint = $('vadConfigHint');
+      if (hint) {
+        hint.textContent = '默认值来自 config 中 meeting.vad（/api/health 下发）。当前：静音 '
+          + (state.vadDefaults.silence_ms / 1000).toFixed(1) + 's、最短 '
+          + state.vadDefaults.min_sec + 's、最长 ' + state.vadDefaults.max_sec + 's。';
+      }
     }
     function getThreshold() {
       const v = parseFloat($('settingThreshold').value);
@@ -2845,21 +2872,22 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
           state.liveBuf.push(frame);
           const { thresh: manualThresh, silMs, maxSamples } = getVadParams();
           const rms = calcRms(frame);
-          // 只在非语音态更新底噪 EMA，避免被自己的声音抬高
-          if (!state.vadIsSpeech) {
+          if (state.vadNoiseFloor < 0.003) state.vadNoiseFloor = 0.003;
+          const dynThresh = Math.max(manualThresh, state.vadNoiseFloor * 3);
+          const exitTh = dynThresh * VAD_SILENCE_EXIT_MULT;
+          if (rms < exitTh) {
             state.vadNoiseFloor = state.vadNoiseFloor * 0.95 + rms * 0.05;
           }
-          if (state.vadNoiseFloor < 0.003) state.vadNoiseFloor = 0.003;
-          // 动态阈值 = max(手动下限, 2.5 × 底噪)
-          const dynThresh = Math.max(manualThresh, state.vadNoiseFloor * 2.5);
-          // worklet 约 100ms 一帧（frame.length ≈ 1600 @ 16k）
           const framesPerSec = rate / Math.max(1, frame.length);
           const silFrameThresh = Math.max(1, Math.ceil((silMs / 1000) * framesPerSec));
           if (rms >= dynThresh) {
             state.vadIsSpeech = true;
             state.silenceFrames = 0;
-          } else {
+          } else if (rms <= exitTh) {
             state.vadIsSpeech = false;
+            state.silenceFrames++;
+            if (state.silenceFrames >= silFrameThresh) flushUtterance(false);
+          } else if (!state.vadIsSpeech) {
             state.silenceFrames++;
             if (state.silenceFrames >= silFrameThresh) flushUtterance(false);
           }
@@ -3968,6 +3996,7 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       grid.innerHTML = '<div class="health-card"><div class="k">状态</div><div class="v">加载中…</div></div>';
       try {
         const h = await api('/api/health');
+        applyVadConfigFromHealth(h.vad);
         wakeAckAudioRel = typeof h.wake_ack_audio === 'string' ? h.wake_ack_audio.trim() : '';
         if (h.kws_keywords) {
           $('settingKwsKeywords').textContent = h.kws_keywords;

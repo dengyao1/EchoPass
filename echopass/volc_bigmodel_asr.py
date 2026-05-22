@@ -33,6 +33,23 @@ import websockets
 
 logger = logging.getLogger("echopass.volc_bigmodel_asr")
 
+# 火山在短 PCM 段上常把「字间停顿」也打成句号，形成「道。德。钉。钉。」；合并相邻汉字间的句号以减轻刷屏。
+_ASR_CJK_PERIOD_BETWEEN_CJK = re.compile(r"([\u4e00-\u9fff])。([\u4e00-\u9fff])")
+
+
+def _normalize_volc_period_spam(text: str) -> str:
+    """去掉相邻汉字之间由标点模型过度插入的「。」，保留正常句末停顿。"""
+    t = (text or "").strip()
+    if not t or "。" not in t:
+        return t
+    prev = None
+    while prev != t:
+        prev = t
+        t = _ASR_CJK_PERIOD_BETWEEN_CJK.sub(r"\1\2", t)
+    t = re.sub(r"。{2,}", "。", t)
+    return t
+
+
 # ── 协议常量（与 openspeech v3 demo 一致）───────────────────────────────
 PROTOCOL_VERSION = 0b0001
 DEFAULT_HEADER_SIZE = 0b0001
@@ -175,7 +192,7 @@ class VolcBigmodelAsrClient:
         app_key: str,
         access_key: str,
         resource_id: str = "volc.bigasr.sauc.duration",
-        ws_url: str = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel",
+        ws_url: str = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async",
         model_name: str = "bigmodel",
         uid: str = "echopass",
         sample_rate: int = 16000,
@@ -202,9 +219,14 @@ class VolcBigmodelAsrClient:
         self.enable_punc = bool(enable_punc)
         self.enable_ddc = bool(enable_ddc)
         self.show_utterances = bool(show_utterances)
-        self.enable_nonstream = bool(enable_nonstream)
+        # bigmodel_nostream 端点要求开启非流式模式，否则可能拒识或行为异常
+        self.enable_nonstream = bool(enable_nonstream) or (
+            "bigmodel_nostream" in (self.ws_url or "")
+        )
         self.connect_timeout = float(connect_timeout)
         self.recv_timeout = float(recv_timeout)
+        if self.enable_nonstream:
+            self.recv_timeout = max(self.recv_timeout, 45.0)
 
         # 独立事件循环线程：和 FastAPI 主事件循环解耦
         self._loop = asyncio.new_event_loop()
@@ -425,7 +447,7 @@ class VolcBigmodelAsrClient:
             except Exception:  # noqa: BLE001
                 pass
 
-        return last_text
+        return _normalize_volc_period_spam(last_text)
 
     def transcribe_pcm16k(
         self,
