@@ -1,6 +1,6 @@
 (function () {
   const THEME_STORAGE_KEY = "echopass_ui_theme";
-  const THEME_IDS = ["aurora", "midnight", "ember", "forest", "paper"];
+  const THEME_IDS = ["aurora", "midnight", "ember", "forest", "sweetcool", "paper"];
 
   let onThemeChanged = null;
 

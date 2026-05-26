@@ -1429,6 +1429,7 @@
     .theme-swatch.midnight span:nth-child(1) { background: #22d3ee; } .theme-swatch.midnight span:nth-child(2) { background: #a5b4fc; } .theme-swatch.midnight span:nth-child(3) { background: #38bdf8; }
     .theme-swatch.ember span:nth-child(1) { background: #fb923c; } .theme-swatch.ember span:nth-child(2) { background: #f97316; } .theme-swatch.ember span:nth-child(3) { background: #fb7185; }
     .theme-swatch.forest span:nth-child(1) { background: #34d399; } .theme-swatch.forest span:nth-child(2) { background: #2dd4bf; } .theme-swatch.forest span:nth-child(3) { background: #4ade80; }
+    .theme-swatch.sweetcool span:nth-child(1) { background: #1A1A1D; } .theme-swatch.sweetcool span:nth-child(2) { background: #E6397C; } .theme-swatch.sweetcool span:nth-child(3) { background: #f472b0; }
     .theme-swatch.paper span:nth-child(1) { background: #0d9488; } .theme-swatch.paper span:nth-child(2) { background: #4f46e5; } .theme-swatch.paper span:nth-child(3) { background: #be185d; }
 
     html[data-theme="midnight"] {
@@ -1527,6 +1528,56 @@
       background: radial-gradient(circle at top right, rgba(16, 185, 129, 0.14), transparent 40%),
         linear-gradient(180deg, rgba(6, 50, 36, 0.95), rgba(2, 18, 12, 0.98));
       border-left-color: rgba(45, 212, 191, 0.12);
+    }
+
+    /* 甜酷：炭黑 #1A1A1D + 甜酷粉 #E6397C */
+    html[data-theme="sweetcool"] {
+      --bg: #1A1A1D; --bg-2: #121214;
+      --panel: rgba(255, 255, 255, 0.06); --panel-soft: rgba(255, 255, 255, 0.04);
+      --panel-strong: rgba(230, 57, 124, 0.12);
+      --border: rgba(230, 57, 124, 0.14); --border-strong: rgba(230, 57, 124, 0.32);
+      --text: #f8f8fa; --text-sub: #e4e4e8; --muted: #9a9aa3;
+      --cyan: #f472b0; --violet: #E6397C; --pink: #E6397C; --gold: #fbbf24; --green: #86efac;
+      --accent: #E6397C; --accent-2: #f472b0; --accent-soft: rgba(230, 57, 124, 0.22);
+      --accent-bubble: linear-gradient(135deg, #E6397C 0%, #1A1A1D 42%, #f472b0 100%);
+      --ok: #86efac; --warn: #fbbf24; --danger: #fb7185;
+      --shadow-card: 0 24px 48px rgba(0, 0, 0, 0.55), 0 0 36px rgba(230, 57, 124, 0.12);
+      --shadow-fab: 0 0 40px rgba(230, 57, 124, 0.45);
+      --glass-bg: rgba(26, 26, 29, 0.78);
+      --glass-bg-strong: rgba(18, 18, 20, 0.94);
+      --drawer-overlay-bg: rgba(10, 10, 12, 0.72);
+    }
+    html[data-theme="sweetcool"] body {
+      background: radial-gradient(circle at 10% 8%, rgba(230, 57, 124, 0.16), transparent 28%),
+        radial-gradient(circle at 92% 14%, rgba(230, 57, 124, 0.1), transparent 24%),
+        linear-gradient(145deg, #121214 0%, #1A1A1D 48%, #0f0f11 100%);
+    }
+    html[data-theme="sweetcool"] body::before { opacity: 0.22; }
+    html[data-theme="sweetcool"] body::after {
+      background: linear-gradient(180deg, rgba(230,57,124,0.05), transparent 32%, transparent 68%, rgba(230,57,124,0.04));
+    }
+    html[data-theme="sweetcool"] .orb.one { background: rgba(230, 57, 124, 0.2); }
+    html[data-theme="sweetcool"] .orb.two { background: rgba(244, 114, 182, 0.16); }
+    html[data-theme="sweetcool"] .orb.three { background: rgba(230, 57, 124, 0.14); }
+    html[data-theme="sweetcool"] .beam {
+      background: linear-gradient(90deg, transparent, rgba(230,57,124,0.12), rgba(244,114,182,0.1), transparent);
+    }
+    html[data-theme="sweetcool"] .drawer {
+      background: radial-gradient(circle at top right, rgba(230, 57, 124, 0.14), transparent 40%),
+        linear-gradient(180deg, rgba(26, 26, 29, 0.97), rgba(12, 12, 14, 0.99));
+      border-left-color: rgba(230, 57, 124, 0.12);
+    }
+    html[data-theme="sweetcool"] .brand-name {
+      background: linear-gradient(135deg, #ffffff 0%, #E6397C 55%, #f472b0 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    html[data-theme="sweetcool"] .rec-text .status.recording {
+      color: #E6397C;
+      text-shadow: 0 0 10px rgba(230, 57, 124, 0.55);
+    }
+    html[data-theme="sweetcool"] .btn-rec.start {
+      background: linear-gradient(135deg, #E6397C, #f472b0, #E6397C);
+      box-shadow: 0 0 32px rgba(230, 57, 124, 0.55);
     }
 
     /* 纸本：浅色高对比，适合白天环境 */
@@ -1740,7 +1791,7 @@
     (function () {
       try {
         var k = 'echopass_ui_theme', t = localStorage.getItem(k);
-        if (t && t !== 'aurora' && { midnight: 1, ember: 1, forest: 1, paper: 1 }[t]) {
+        if (t && t !== 'aurora' && { midnight: 1, ember: 1, forest: 1, sweetcool: 1, paper: 1 }[t]) {
           document.documentElement.setAttribute('data-theme', t);
         }
       } catch (e) {}
@@ -1810,6 +1861,11 @@
                 <span>森语</span>
                 <span class="sub">松绿与青 · 护目</span>
                 <span class="theme-swatch forest" aria-hidden="true"><span></span><span></span><span></span></span>
+              </button>
+              <button type="button" class="theme-pill" data-theme-id="sweetcool" title="炭黑与甜酷粉 · 典藏级高对比">
+                <span>甜酷</span>
+                <span class="sub">炭黑 #1A1A1D · 粉 #E6397C</span>
+                <span class="theme-swatch sweetcool" aria-hidden="true"><span></span><span></span><span></span></span>
               </button>
               <button type="button" class="theme-pill" data-theme-id="paper" title="米白纸感浅色">
                 <span>纸本</span>
