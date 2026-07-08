@@ -555,7 +555,10 @@ FastAPI (app.py)
 | `SPEAKER_VOLC_ASR_WS_URL` | `asr.volc.ws_url` | `bigmodel_async`（v3） | WebSocket 地址；留空即用默认 `.../sauc/bigmodel_async` |
 | `SPEAKER_VOLC_ASR_RESOURCE_ID` | `asr.volc.resource_id` | `volc.bigasr.sauc.duration` | 仅 bigmodel 版使用 |
 | `SPEAKER_VOLC_ASR_ENABLE_PUNC` | `asr.volc.enable_punc` | `true` | 大模型 ASR 自动标点 |
-| `SPEAKER_VOLC_ASR_ENABLE_NONSTREAM` | `asr.volc.enable_nonstream` | `false` | 非流式整段识别（长段更稳，延迟更高） |
+| `SPEAKER_VOLC_ASR_ENABLE_NONSTREAM` | `asr.volc.enable_nonstream` | `true` | 流式 + 云端 VAD 判句（`streaming: true` 时须开启） |
+| `SPEAKER_VOLC_STREAMING` | `asr.volc.streaming` | `true` | 会议录音走 `/ws/asr` 长连接 + 火山云端 VAD |
+| `SPEAKER_VOLC_END_WINDOW_SIZE` | `asr.volc.end_window_size` | `800` | 云端 VAD 静音判句窗口（ms） |
+| `SPEAKER_VOLC_FORCE_TO_SPEECH_TIME` | `asr.volc.force_to_speech_time` | `1000` | 强制判为语音的最短时长（ms） |
 | `SPEAKER_VOLC_ASR_ENABLE_ITN` | `asr.volc.enable_itn` | `true` | 逆文本归一化 |
 | `SPEAKER_VOLC_ASR_ENABLE_DDC` | `asr.volc.enable_ddc` | `true` | 顺滑（DDC） |
 | `SPEAKER_VAD_SILENCE_MS` | `meeting.vad.silence_ms` | `500` | 前端 VAD 静音判停（ms），`/api/health` 下发 |

@@ -401,7 +401,7 @@ class StreamingASREngine:
             "asr.volc.enable_punc", "SPEAKER_VOLC_ASR_ENABLE_PUNC", True, to_bool,
         )
         self._volc_enable_nonstream = cfg(
-            "asr.volc.enable_nonstream", "SPEAKER_VOLC_ASR_ENABLE_NONSTREAM", False, to_bool,
+            "asr.volc.enable_nonstream", "SPEAKER_VOLC_ASR_ENABLE_NONSTREAM", True, to_bool,
         )
         self._volc_enable_itn = cfg(
             "asr.volc.enable_itn", "SPEAKER_VOLC_ASR_ENABLE_ITN", True, to_bool,
@@ -412,7 +412,7 @@ class StreamingASREngine:
         self._volc_streaming = cfg(
             "asr.volc.streaming",
             "SPEAKER_VOLC_STREAMING",
-            False,
+            True,
             to_bool,
         )
         self._volc_end_window_size = cfg(
