@@ -1988,9 +1988,6 @@
           </button>
         </div>
         <div class="chat-scope">问答范围：<span class="tag-inline" id="chatScopeLabel">本场会议</span></div>
-        <div class="chat-chips">
-          <button class="chat-chip" data-chip="highlights">帮我提炼一下重点内容</button>
-        </div>
         <div class="chat-history" id="chatHistory">
           <div class="chat-msg bot">
             <div class="who">小云</div>
@@ -2129,21 +2126,6 @@
           </label>
         </div>
         <div id="fabDebug" style="margin-top:0.4rem;font-size:0.75rem;color:var(--muted);"></div>
-      </section>
-
-      <section class="drawer-section">
-        <details class="advanced">
-          <summary>高级：VAD 参数</summary>
-          <label>静音触发阈值（RMS）</label>
-          <input type="number" id="settingSilenceThresh" value="0.01" min="0.001" max="0.1" step="0.001" />
-          <label>静音持续（毫秒）</label>
-          <input type="number" id="settingSilenceMs" value="500" min="200" max="2000" step="100" />
-          <label>最短触发长度（秒）</label>
-          <input type="number" id="settingMinLen" value="2.5" min="0.5" max="5" step="0.5" />
-          <label>最长累计长度（秒）</label>
-          <input type="number" id="settingMaxLen" value="8" min="3" max="20" step="1" />
-          <p id="vadConfigHint" style="margin:0.35rem 0 0;font-size:0.75rem;color:var(--muted);"></p>
-        </details>
       </section>
     </div>
   </aside>
@@ -2468,21 +2450,12 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       liveRunning: false,
       livePaused: false,
       liveSubCb: null,
-      liveBuf: [],
-      liveTail: null,
-      silenceFrames: 0,
       liveStartTs: 0,
       livePausedAt: 0,
       livePausedTotalMs: 0,
       liveTimer: null,
-      asrInFlight: 0, // 计数，并行多段识别时兼容
       currentPartial: '', // 实时可视气泡的临时文字
       currentSpeakerHint: '', // 最近一次已完成气泡的发言人
-
-      // 动态 VAD
-      vadDefaults: null,      // /api/health 下发的 meeting.vad
-      vadNoiseFloor: 0.006, // EMA 估计的背景底噪 RMS
-      vadIsSpeech: false,   // 上一帧是否判为有声
 
       // 纪要
       summaryAuto: true,
@@ -2523,9 +2496,6 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
     };
     const MAX_RECORD_SEC = 6 * 60 * 60; // 06:00:00 上限
     const SUMMARY_DEBOUNCE_MS = 8000;
-    // 切段时保留上段尾部 0.25s，减轻句首丢字
-    const TAIL_SEC = 0.25;
-    const VAD_SILENCE_EXIT_MULT = 0.44;
 
     // ═══════════════════════════════════════════════════
     // 3) 顶部栏：日期时间 + 保存状态 + 导出
@@ -2678,23 +2648,19 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       const color = speakerColor(who);
       const initial = speakerInitial(who);
       const partial = state.currentPartial && state.currentPartial.trim();
-      const flight = state.asrInFlight > 0;
       let body = '';
       if (partial) {
         body = escHtml(partial);
-      } else if (flight) {
-        body = '<span class="dots"><span></span><span></span><span></span></span> 识别中…';
       } else if (state.livePaused) {
         body = '已暂停';
       } else {
         body = '<span class="dots"><span></span><span></span><span></span></span> 正在聆听…';
       }
-      const badge = flight ? '<span class="badge">识别中</span>' : '';
       return (
         '<div class="bubble current">' +
           '<div class="avatar" style="background:' + color + '">' + escHtml(initial) + '</div>' +
           '<div class="body">' +
-            '<div class="meta"><span class="name">' + escHtml(who) + '</span>' + badge + '</div>' +
+            '<div class="meta"><span class="name">' + escHtml(who) + '</span></div>' +
             '<div class="text">' + body + '</div>' +
           '</div>' +
         '</div>'
@@ -2741,59 +2707,9 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
     // ═══════════════════════════════════════════════════
     // 5) 底部录音控制：开始 / 暂停（不释放麦克风）/ 停止
     // ═══════════════════════════════════════════════════
-    function getVadParams() {
-      const rate = sharedMic.sampleRate; // 固定 16000
-      const d = state.vadDefaults || {};
-      return {
-        thresh: parseFloat($('settingSilenceThresh').value) || d.silence_thresh_rms || 0.01,
-        silMs: parseInt($('settingSilenceMs').value, 10) || d.silence_ms || 500,
-        minSamples: (parseFloat($('settingMinLen').value) || d.min_sec || 2.5) * rate,
-        maxSamples: (parseFloat($('settingMaxLen').value) || d.max_sec || 8) * rate,
-      };
-    }
-    function applyVadConfigFromHealth(vad) {
-      if (!vad || typeof vad !== 'object') return;
-      state.vadDefaults = {
-        silence_ms: Number(vad.silence_ms) || 500,
-        min_sec: Number(vad.min_sec) || 2.5,
-        max_sec: Number(vad.max_sec) || 8,
-        silence_thresh_rms: Number(vad.silence_thresh_rms) || 0.01,
-      };
-      const thEl = $('settingSilenceThresh');
-      const silEl = $('settingSilenceMs');
-      const minEl = $('settingMinLen');
-      const maxEl = $('settingMaxLen');
-      if (thEl) thEl.value = String(state.vadDefaults.silence_thresh_rms);
-      if (silEl) silEl.value = String(state.vadDefaults.silence_ms);
-      if (minEl) minEl.value = String(state.vadDefaults.min_sec);
-      if (maxEl) maxEl.value = String(state.vadDefaults.max_sec);
-      const hint = $('vadConfigHint');
-      if (hint) {
-        if (state.asrStreaming) {
-          hint.textContent = '会议录音已启用火山云端 VAD（asr.volc.streaming）；下方 meeting.vad 仅用于未开流式时的前端切段或兼容场景。';
-        } else {
-          hint.textContent = '默认值来自 config 中 meeting.vad（/api/health 下发）。当前：静音 '
-            + (state.vadDefaults.silence_ms / 1000).toFixed(1) + 's、最短 '
-            + state.vadDefaults.min_sec + 's、最长 ' + state.vadDefaults.max_sec + 's。';
-        }
-      }
-    }
     function getThreshold() {
       const v = parseFloat($('settingThreshold').value);
       return Number.isFinite(v) ? v : 0.45;
-    }
-    function calcRms(arr) {
-      let s = 0;
-      for (let i = 0; i < arr.length; i++) s += arr[i] * arr[i];
-      return Math.sqrt(s / arr.length);
-    }
-    function bufSamples() { return state.liveBuf.reduce((s, a) => s + a.length, 0); }
-    function flattenBuf(arrays) {
-      const total = arrays.reduce((s, a) => s + a.length, 0);
-      const out = new Float32Array(total);
-      let o = 0;
-      for (const a of arrays) { out.set(a, o); o += a.length; }
-      return out;
     }
     function setRecUi(kind) {
       const status = $('recStatus');
@@ -2881,62 +2797,6 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       } catch (_) {}
     }
 
-    async function flushUtterance(force) {
-      if (!state.liveBuf.length) return;
-      const samples = bufSamples();
-      const { minSamples } = getVadParams();
-      if (!force && samples < minSamples) return;
-
-      const newPcm = flattenBuf(state.liveBuf);
-      let pcmToSend;
-      if (state.liveTail && state.liveTail.length) {
-        pcmToSend = new Float32Array(state.liveTail.length + newPcm.length);
-        pcmToSend.set(state.liveTail, 0);
-        pcmToSend.set(newPcm, state.liveTail.length);
-      } else {
-        pcmToSend = newPcm;
-      }
-      const tailLen = Math.min(newPcm.length, Math.round(TAIL_SEC * sharedMic.sampleRate));
-      state.liveTail = newPcm.slice(newPcm.length - tailLen);
-      state.liveBuf = [];
-      state.silenceFrames = 0;
-
-      const rate = sharedMic.sampleRate;
-      const th = getThreshold();
-      // 估算本段在整场录音里的开始时间：当前录音总时长 − 本段样本数
-      const segDurSec = pcmToSend.length / rate;
-      const nowDurSec = recTrack.durationSec;
-      const startSec = Math.max(0, nowDurSec - segDurSec);
-      const offsetMs = Math.round(startSec * 1000);
-      state.asrInFlight++;
-      renderTranscript();
-      try {
-        const buf = pcmToSend.buffer.slice(pcmToSend.byteOffset, pcmToSend.byteOffset + pcmToSend.byteLength);
-        const hwEl = $('settingHotword');
-        const hw = hwEl ? (hwEl.value || '').trim() : '';
-        const url = '/api/recognize_pcm?sample_rate=' + rate
-          + '&threshold=' + th
-          + '&session_id=' + encodeURIComponent(state.liveSessionId)
-          + '&offset_ms=' + offsetMs
-          + (hw ? '&hotword=' + encodeURIComponent(hw) : '');
-        const r = await api(url, {
-          method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: buf,
-        });
-        if ((r.text || '').trim()) {
-          appendTranscript(r.speaker, r.text, r.text_raw, r.llm_corrected, {
-            start_ms: (typeof r.start_ms === 'number' ? r.start_ms : offsetMs),
-            end_ms: (typeof r.end_ms === 'number' ? r.end_ms : offsetMs + Math.round(segDurSec * 1000)),
-            duration_sec: (typeof r.duration_sec === 'number' ? r.duration_sec : segDurSec),
-          });
-        }
-      } catch (e) {
-        toast('识别失败：' + e.message);
-      } finally {
-        state.asrInFlight = Math.max(0, state.asrInFlight - 1);
-        renderTranscript();
-      }
-    }
-
     async function startLive() {
       if (state.liveRunning) return;
       try {
@@ -2946,68 +2806,20 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
             state.asrStreaming = !!h.asr_streaming;
           } catch (_) {}
         }
-        if (state.asrStreaming) {
-          state.transcriptLines = [];
-          state.liveBuf = []; state.liveTail = null;
-          state.silenceFrames = 0; state.currentPartial = '';
-          state.meetingStartTs = Date.now();
-          state.liveStartTs = state.meetingStartTs;
-          state.livePausedAt = 0; state.livePausedTotalMs = 0;
-          state.livePaused = false;
-          state.summaryData = null; renderSummary();
-          state.chaptersData = null;
-          state.chaptersGeneratedAt = null;
-          state.chaptersError = null;
-          state.chaptersInFlight = false;
-          recTrack.reset();
-          resetAudioPlayer();
-          renderTimelineList();
-          renderSpeakersStats();
-          EchoPassChapters.renderChapters();
-          updateHeaderDate();
-          await api('/api/asr_reset?session_id=' + encodeURIComponent(state.liveSessionId), { method: 'POST' }).catch(() => {});
-          try {
-            await api('/api/meeting/participants', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                session_id: state.liveSessionId,
-                names: Array.from(participantsSelected || []),
-              }),
-            });
-          } catch (_) {}
-          await connectAsrStream();
-          await recTrack.start(() => { drawWaveform(); });
-          state.liveSubCb = await sharedMic.subscribe((frame) => {
-            if (!state.liveRunning || state.livePaused) return;
-            sendAsrStreamFrame(frame);
-          });
-          state.liveRunning = true;
-          setRecUi('recording');
-          setSaveStatus('recording');
-          startRecTimer();
-          renderTranscript();
-          if (!wakeRunning) enableWake().catch(() => {});
-          return;
+        if (!state.asrStreaming) {
+          throw new Error('ASR 流式未启用，请在 config 中设置 asr.volc.streaming: true 并重启服务');
         }
-
-        // session_id 在页面加载时已生成（一个浏览器标签 = 一场会议）；
-        // 这里只重置该 session 在后端的 ASR/转录/纪要状态，不再换 ID。
         state.transcriptLines = [];
-        state.liveBuf = []; state.liveTail = null;
-        state.silenceFrames = 0; state.currentPartial = '';
-        state.vadNoiseFloor = 0.006; state.vadIsSpeech = false;
+        state.currentPartial = '';
         state.meetingStartTs = Date.now();
         state.liveStartTs = state.meetingStartTs;
         state.livePausedAt = 0; state.livePausedTotalMs = 0;
         state.livePaused = false;
         state.summaryData = null; renderSummary();
-        // 重置 AI 章节状态（新会议从零开始）
         state.chaptersData = null;
         state.chaptersGeneratedAt = null;
         state.chaptersError = null;
         state.chaptersInFlight = false;
-        // 重置整场录音轨 + 音频播放器
         recTrack.reset();
         resetAudioPlayer();
         renderTimelineList();
@@ -3015,7 +2827,6 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
         EchoPassChapters.renderChapters();
         updateHeaderDate();
         await api('/api/asr_reset?session_id=' + encodeURIComponent(state.liveSessionId), { method: 'POST' }).catch(() => {});
-        // 把当前已选的「本场会议参与者」同步到本会议白名单（哪怕为空也写一遍，便于后端知道）
         try {
           await api('/api/meeting/participants', {
             method: 'POST',
@@ -3025,47 +2836,19 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
               names: Array.from(participantsSelected || []),
             }),
           });
-        } catch (_) { /* 列表为空或后端拒收都不阻塞开会 */ }
-
-        // 整场录音轨：与 ASR 并行；每帧驱动波形重绘
+        } catch (_) {}
+        await connectAsrStream();
         await recTrack.start(() => { drawWaveform(); });
-
-        state.liveSubCb = await sharedMic.subscribe((frame, rate) => {
+        state.liveSubCb = await sharedMic.subscribe((frame) => {
           if (!state.liveRunning || state.livePaused) return;
-          state.liveBuf.push(frame);
-          const { thresh: manualThresh, silMs, maxSamples } = getVadParams();
-          const rms = calcRms(frame);
-          if (state.vadNoiseFloor < 0.003) state.vadNoiseFloor = 0.003;
-          const dynThresh = Math.max(manualThresh, state.vadNoiseFloor * 3);
-          const exitTh = dynThresh * VAD_SILENCE_EXIT_MULT;
-          if (rms < exitTh) {
-            state.vadNoiseFloor = state.vadNoiseFloor * 0.95 + rms * 0.05;
-          }
-          const framesPerSec = rate / Math.max(1, frame.length);
-          const silFrameThresh = Math.max(1, Math.ceil((silMs / 1000) * framesPerSec));
-          if (rms >= dynThresh) {
-            state.vadIsSpeech = true;
-            state.silenceFrames = 0;
-          } else if (rms <= exitTh) {
-            state.vadIsSpeech = false;
-            state.silenceFrames++;
-            if (state.silenceFrames >= silFrameThresh) flushUtterance(false);
-          } else if (!state.vadIsSpeech) {
-            state.silenceFrames++;
-            if (state.silenceFrames >= silFrameThresh) flushUtterance(false);
-          }
-          if (bufSamples() >= maxSamples) flushUtterance(true);
+          sendAsrStreamFrame(frame);
         });
-
         state.liveRunning = true;
         setRecUi('recording');
         setSaveStatus('recording');
         startRecTimer();
         renderTranscript();
-        // 开始会议录音时同步打开「小云」唤醒监听（无单独开关，与录音一体）
-        if (!wakeRunning) {
-          enableWake().catch(() => {});
-        }
+        if (!wakeRunning) enableWake().catch(() => {});
       } catch (e) {
         toast('开始录音失败：' + (e && e.message ? e.message : '未知错误'));
         setRecUi('stopped');
@@ -3092,14 +2875,9 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       if (!state.liveRunning) return;
       state.liveRunning = false;
       state.livePaused = false;
-      if (state.asrStreaming) {
-        disconnectAsrStream();
-      } else {
-        await flushUtterance(true).catch(() => {});
-      }
+      disconnectAsrStream();
       if (state.liveSubCb) { sharedMic.unsubscribe(state.liveSubCb); state.liveSubCb = null; }
       recTrack.stop();
-      state.liveBuf = []; state.liveTail = null; state.silenceFrames = 0;
       stopRecTimer();
       setRecUi('stopped');
       setSaveStatus('saved');
@@ -3350,6 +3128,8 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
     const MANUAL_CHAT_SIL_MS = 800;
     /** 右栏话筒：开录后若干毫秒内不把静音算进「判停」，给人反应时间 */
     const MANUAL_CHAT_START_GRACE_MS = 550;
+    /** 右栏话筒 / 唤醒拾音：RMS 静音阈值（与会议录音 VAD 无关） */
+    const VOICE_INPUT_SILENCE_RMS = 0.01;
     /**
      * 预制提示音 ended 之后再宽限的毫秒数：此间不按静音切段（原为 4s 体感很慢）。
      * 若以交互为先、能接受提示音回声进缓冲，可保持较小值。
@@ -3820,8 +3600,7 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       let rms = 0;
       for (let i = 0; i < frame.length; i++) rms += frame[i] * frame[i];
       rms = Math.sqrt(rms / frame.length);
-      const st = $('settingSilenceThresh');
-      const silThresh = st ? (parseFloat(st.value) || 0.01) : 0.01;
+      const silThresh = VOICE_INPUT_SILENCE_RMS;
       const framesPerSec = rate / Math.max(1, frame.length);
       const silFrameThresh = Math.max(1, Math.ceil((MANUAL_CHAT_SIL_MS / 1000) * framesPerSec));
       const listenedSec = manualChatBuf.reduce((s, a) => s + a.length, 0) / rate;
@@ -4098,7 +3877,7 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
             let rms = 0;
             for (let i = 0; i < frame.length; i++) rms += frame[i] * frame[i];
             rms = Math.sqrt(rms / frame.length);
-            const silThresh = parseFloat($('settingSilenceThresh').value) || 0.01;
+            const silThresh = VOICE_INPUT_SILENCE_RMS;
             // worklet 约 100ms 一帧；按实际帧长换算
             const framesPerSec = rate / Math.max(1, frame.length);
             const silFrameThresh = Math.max(1, Math.ceil((WAKE_SIL_MS / 1000) * framesPerSec));
@@ -4164,7 +3943,6 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       try {
         const h = await api('/api/health');
         state.asrStreaming = !!h.asr_streaming;
-        applyVadConfigFromHealth(h.vad);
         wakeAckAudioRel = typeof h.wake_ack_audio === 'string' ? h.wake_ack_audio.trim() : '';
         if (h.kws_keywords) {
           $('settingKwsKeywords').textContent = h.kws_keywords;
@@ -5005,14 +4783,6 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       $('btnChatClear').addEventListener('click', () => {
         state.chatMessages = [];
         renderChatHistory();
-      });
-      document.querySelectorAll('.chat-chip').forEach((chip) => {
-        chip.addEventListener('click', () => {
-          const kind = chip.getAttribute('data-chip');
-          if (kind === 'highlights') {
-            sendChat('请用 5 条 bullet 总结本场会议的重点内容，每条 30 字以内。');
-          }
-        });
       });
     }
 
