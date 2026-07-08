@@ -68,7 +68,14 @@ asr:
     seg_ms: 0
     # 留空 ws_url 时默认 bigmodel_async；回滚同步版可设 wss://.../api/v3/sauc/bigmodel
     enable_punc: true
-    enable_nonstream: false
+    # 会议流式（streaming: true）须 enable_nonstream: true，由火山云端 VAD 切段
+    streaming: true
+    enable_nonstream: true
+    end_window_size: 800        # 静音判句窗口（ms）
+    force_to_speech_time: 1000  # 强制判为语音的最短时长（ms）
+    show_utterances: true
+    stream_connect_timeout: 10
+    stream_recv_timeout: 60
     enable_itn: true
     enable_ddc: true
 

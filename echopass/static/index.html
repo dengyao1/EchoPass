@@ -2517,6 +2517,9 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
 
       // WebSocket
       wsCtl: null,
+      asrStreaming: false,   // /api/health.asr_streaming（会议录音走火山云端 VAD）
+      wsAsr: null,
+      asrStreamReady: false,
     };
     const MAX_RECORD_SEC = 6 * 60 * 60; // 06:00:00 上限
     const SUMMARY_DEBOUNCE_MS = 8000;
@@ -2766,9 +2769,13 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       if (maxEl) maxEl.value = String(state.vadDefaults.max_sec);
       const hint = $('vadConfigHint');
       if (hint) {
-        hint.textContent = '默认值来自 config 中 meeting.vad（/api/health 下发）。当前：静音 '
-          + (state.vadDefaults.silence_ms / 1000).toFixed(1) + 's、最短 '
-          + state.vadDefaults.min_sec + 's、最长 ' + state.vadDefaults.max_sec + 's。';
+        if (state.asrStreaming) {
+          hint.textContent = '会议录音已启用火山云端 VAD（asr.volc.streaming）；下方 meeting.vad 仅用于未开流式时的前端切段或兼容场景。';
+        } else {
+          hint.textContent = '默认值来自 config 中 meeting.vad（/api/health 下发）。当前：静音 '
+            + (state.vadDefaults.silence_ms / 1000).toFixed(1) + 's、最短 '
+            + state.vadDefaults.min_sec + 's、最长 ' + state.vadDefaults.max_sec + 's。';
+        }
       }
     }
     function getThreshold() {
@@ -2823,6 +2830,55 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
     }
     function stopRecTimer() {
       if (state.liveTimer) { clearInterval(state.liveTimer); state.liveTimer = null; }
+    }
+
+    function disconnectAsrStream() {
+      if (state.wsAsr) {
+        try {
+          if (state.wsAsr.readyState === WebSocket.OPEN) {
+            state.wsAsr.send(JSON.stringify({ cmd: 'stop' }));
+          }
+        } catch (_) {}
+        try { state.wsAsr.onclose = null; state.wsAsr.close(); } catch (_) {}
+        state.wsAsr = null;
+      }
+      state.asrStreamReady = false;
+    }
+
+    function connectAsrStream() {
+      disconnectAsrStream();
+      const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+      const params = new URLSearchParams({
+        session_id: state.liveSessionId,
+        sample_rate: String(sharedMic.sampleRate || 16000),
+        threshold: String(getThreshold()),
+      });
+      const hwEl = $('settingHotword');
+      const hw = hwEl ? (hwEl.value || '').trim() : '';
+      if (hw) params.set('hotword', hw);
+      return new Promise((resolve, reject) => {
+        const ws = new WebSocket(proto + location.host + '/ws/asr?' + params.toString());
+        state.wsAsr = ws;
+        ws.binaryType = 'arraybuffer';
+        ws.onopen = () => { state.asrStreamReady = true; resolve(); };
+        ws.onerror = () => {
+          state.asrStreamReady = false;
+          reject(new Error('ASR 流连接失败'));
+        };
+        ws.onclose = () => {
+          state.asrStreamReady = false;
+          if (state.wsAsr === ws) state.wsAsr = null;
+        };
+      });
+    }
+
+    function sendAsrStreamFrame(frame) {
+      const ws = state.wsAsr;
+      if (!ws || ws.readyState !== WebSocket.OPEN || !state.asrStreamReady) return;
+      try {
+        const buf = frame.buffer.slice(frame.byteOffset, frame.byteOffset + frame.byteLength);
+        ws.send(buf);
+      } catch (_) {}
     }
 
     async function flushUtterance(force) {
@@ -2884,6 +2940,57 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
     async function startLive() {
       if (state.liveRunning) return;
       try {
+        if (state.asrStreaming === false) {
+          try {
+            const h = await api('/api/health');
+            state.asrStreaming = !!h.asr_streaming;
+          } catch (_) {}
+        }
+        if (state.asrStreaming) {
+          state.transcriptLines = [];
+          state.liveBuf = []; state.liveTail = null;
+          state.silenceFrames = 0; state.currentPartial = '';
+          state.meetingStartTs = Date.now();
+          state.liveStartTs = state.meetingStartTs;
+          state.livePausedAt = 0; state.livePausedTotalMs = 0;
+          state.livePaused = false;
+          state.summaryData = null; renderSummary();
+          state.chaptersData = null;
+          state.chaptersGeneratedAt = null;
+          state.chaptersError = null;
+          state.chaptersInFlight = false;
+          recTrack.reset();
+          resetAudioPlayer();
+          renderTimelineList();
+          renderSpeakersStats();
+          EchoPassChapters.renderChapters();
+          updateHeaderDate();
+          await api('/api/asr_reset?session_id=' + encodeURIComponent(state.liveSessionId), { method: 'POST' }).catch(() => {});
+          try {
+            await api('/api/meeting/participants', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                session_id: state.liveSessionId,
+                names: Array.from(participantsSelected || []),
+              }),
+            });
+          } catch (_) {}
+          await connectAsrStream();
+          await recTrack.start(() => { drawWaveform(); });
+          state.liveSubCb = await sharedMic.subscribe((frame) => {
+            if (!state.liveRunning || state.livePaused) return;
+            sendAsrStreamFrame(frame);
+          });
+          state.liveRunning = true;
+          setRecUi('recording');
+          setSaveStatus('recording');
+          startRecTimer();
+          renderTranscript();
+          if (!wakeRunning) enableWake().catch(() => {});
+          return;
+        }
+
         // session_id 在页面加载时已生成（一个浏览器标签 = 一场会议）；
         // 这里只重置该 session 在后端的 ASR/转录/纪要状态，不再换 ID。
         state.transcriptLines = [];
@@ -2985,7 +3092,11 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       if (!state.liveRunning) return;
       state.liveRunning = false;
       state.livePaused = false;
-      await flushUtterance(true).catch(() => {});
+      if (state.asrStreaming) {
+        disconnectAsrStream();
+      } else {
+        await flushUtterance(true).catch(() => {});
+      }
       if (state.liveSubCb) { sharedMic.unsubscribe(state.liveSubCb); state.liveSubCb = null; }
       recTrack.stop();
       state.liveBuf = []; state.liveTail = null; state.silenceFrames = 0;
@@ -4052,6 +4163,7 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
       grid.innerHTML = '<div class="health-card"><div class="k">状态</div><div class="v">加载中…</div></div>';
       try {
         const h = await api('/api/health');
+        state.asrStreaming = !!h.asr_streaming;
         applyVadConfigFromHealth(h.vad);
         wakeAckAudioRel = typeof h.wake_ack_audio === 'string' ? h.wake_ack_audio.trim() : '';
         if (h.kws_keywords) {
@@ -4067,10 +4179,11 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
           ['语音唤醒', h.kws_enabled === false ? ['warn', '已关闭（无本地 KWS）'] : ['ok', '小云小云 KWS']],
           ['ASR', h.asr_ready ? ['ok', (() => {
             const p = String(h.asr_provider || '');
-            if (p === 'volcengine/bigmodel') return '火山 · 豆包大模型';
-            if (p === 'volcengine/common' || p === 'volcengine') return '火山 · 通用流式';
-            if (p.startsWith('volcengine')) return '火山云端';
-            return h.funasr_local_weights ? '本地权重' : 'Hub 模型';
+            const streamTag = h.asr_streaming ? ' · 云端VAD' : '';
+            if (p === 'volcengine/bigmodel') return '火山 · 豆包大模型' + streamTag;
+            if (p === 'volcengine/common' || p === 'volcengine') return '火山 · 通用流式' + streamTag;
+            if (p.startsWith('volcengine')) return '火山云端' + streamTag;
+            return (h.funasr_local_weights ? '本地权重' : 'Hub 模型') + streamTag;
           })()] : ['warn', '待加载']],
           ['存储', h.persistence === 'postgresql' ? ['ok', 'PostgreSQL'] : ['warn', '内存']],
           ['设备', ['ok', String(h.device || '—')]],
@@ -4332,6 +4445,26 @@ registerProcessor('pcm-resampler', PcmResamplerProcessor);
             setFabTtsState('playing');
           } else if (m.type === 'tts_finished') {
             setFabTtsState('done');
+          } else if (m.type === 'asr_interim') {
+            const evtSid = (m.session_id != null) ? String(m.session_id).trim() : '';
+            if (evtSid && evtSid !== state.liveSessionId) return;
+            const p = m.payload || {};
+            const t = String(p.text || p.text_raw || '').trim();
+            state.currentPartial = t;
+            renderTranscript();
+          } else if (m.type === 'asr_final') {
+            const evtSid = (m.session_id != null) ? String(m.session_id).trim() : '';
+            if (evtSid && evtSid !== state.liveSessionId) return;
+            const p = m.payload || {};
+            const spk = (p.speaker != null && String(p.speaker).trim()) ? String(p.speaker).trim() : '';
+            if (spk && spk !== '未知说话人') state.currentSpeakerHint = spk;
+            if (String(p.text || '').trim()) {
+              appendTranscript(p.speaker, p.text, p.text_raw, p.llm_corrected, {
+                start_ms: (typeof p.start_ms === 'number' ? p.start_ms : 0),
+                end_ms: (typeof p.end_ms === 'number' ? p.end_ms : 0),
+                duration_sec: (typeof p.duration_sec === 'number' ? p.duration_sec : 0),
+              });
+            }
           }
         } catch (_) {}
       };

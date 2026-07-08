@@ -88,30 +88,31 @@ EchoPass/
 
 ```mermaid
 flowchart TB
-    A[🎤 浏览器麦克风] --> B["POST /api/recognize_pcm<br/>(每 2.5s 一段 PCM)"]
-    B --> C["CAM++ 声纹提取<br/>→ 说话人识别"]
-    B --> D["火山 ASR 转写<br/>(WebSocket)"]
-    C --> E["参与者白名单过滤"]
-    D --> F["可选 LLM 纠错"]
-    E --> G[TranscriptBuffer<br/>转录缓冲]
-    F --> G
-    G --> H["WS 实时推送给前端<br/>asr_interim / asr_final"]
-    G --> I["MeetingSummarizer<br/>纪要 / 章节"]
-    G --> J["Assistant + LLM<br/>会中问答"]
-    I --> K["📋 模块化纪要 JSON"]
-    J --> L["🔊 TTS 语音播报"]
-    G --> M["📦 ZIP 导出<br/>音频 + 文本 + 纪要"]
+    A[🎤 浏览器麦克风] --> B{asr.volc.streaming?}
+    B -->|true 推荐| C["WS /ws/asr<br/>持续送 PCM"]
+    B -->|false 兼容| D["POST /api/recognize_pcm<br/>(前端 VAD 切段)"]
+    C --> E["火山 bigmodel_async<br/>云端 VAD 判句"]
+    D --> F["火山 ASR 短会话<br/>(每段独立 WS)"]
+    C --> G["CAM++ 声纹提取<br/>→ 说话人识别"]
+    D --> G
+    E --> H["可选 LLM 纠错"]
+    F --> H
+    G --> I[TranscriptBuffer<br/>转录缓冲]
+    H --> I
+    I --> J["WS /ws/control<br/>asr_interim / asr_final"]
+    I --> K["MeetingSummarizer<br/>纪要 / 章节"]
+    I --> L["Assistant + LLM<br/>会中问答"]
+    K --> M["📋 模块化纪要 JSON"]
+    L --> N["🔊 TTS 语音播报"]
+    I --> O["📦 ZIP 导出<br/>音频 + 文本 + 纪要"]
 ```
 
 核心流程说明：
 
-1. **前端** 通过浏览器采集麦克风音频，RMS + 动态底噪 + 滞回 VAD 切句（参数可由 `meeting.vad` 配置）
-2. **每段音频** 发送到后端，并行执行声纹识别（CAM++）和语音转写（火山 ASR）
-3. **转录结果** 写入 TranscriptBuffer，同一说话人的连续发言自动去重合并
-4. **实时推送** 通过 WebSocket 将识别结果实时推送给前端展示
-5. **会议纪要** 由 LLM 根据转录缓存生成模块化 JSON（背景/议题/决议/待办），LLM 不可用时自动回退规则摘要
-6. **AI 章节** 按话题变化自动切分会议段落，每章生成标题和摘要
-7. **会中助手** 支持语音唤醒「小云小云」，结合会议上下文进行多轮问答
+1. **会议录音（推荐）**：`asr.volc.streaming: true` 时，前端经 **`/ws/asr`** 持续送 16kHz PCM，由火山 **`bigmodel_async`** 云端 VAD（`enable_nonstream` + `end_window_size`）产出 definite utterances；句级结果经 **`/ws/control`** 推送 `asr_interim` / `asr_final`
+2. **兼容模式**：`streaming: false` 时仍用前端 RMS VAD 切段，每段 **`POST /api/recognize_pcm`**
+3. **每句/每段音频** 在后端并行声纹识别（CAM++）与转写缓冲写入；同一说话人连续发言自动去重合并
+4. **会议纪要** 由 LLM 根据转录缓存生成模块化 JSON；**AI 章节**按话题切分；**会中助手**支持「小云小云」唤醒问答
 
 ---
 
@@ -206,7 +207,10 @@ FORCE_ONLINE=1 ./scripts/run.sh
 | `asr.volc.api` | ASR 版本：`bigmodel`（豆包 2.0，推荐）或 `common`（通用版） |
 | `asr.volc.ws_url` | 留空默认 `bigmodel_async`；回滚可设 `.../sauc/bigmodel` |
 | `asr.volc.enable_punc` / `enable_itn` / `enable_ddc` | 大模型 ASR 后处理开关（见 `prod.yaml.example`） |
-| `meeting.vad.*` | 会议录音 VAD 默认（静音 500ms 等），由 `/api/health` 同步到前端 |
+| `asr.volc.streaming` | `true` 时会议录音走 `/ws/asr` + 火山云端 VAD（推荐） |
+| `asr.volc.enable_nonstream` | 流式模式下须 `true`，配合 `end_window_size` 云端判句 |
+| `asr.volc.end_window_size` | 静音判句窗口（ms），默认 800 |
+| `meeting.vad.*` | 仅 `streaming: false` 时前端 VAD 默认；流式模式下由 `/api/health` 下发但会议录音不用 |
 | `asr.max_concurrent` | 并发 ASR 连接上限（默认 32） |
 | `preload_models: false` | 关闭启动时模型预加载（加快调试重启速度） |
 
@@ -273,6 +277,7 @@ Docker 镜像特点：
 | 路径 | 说明 |
 |------|------|
 | `/ws/control?session_id=<sid>` | 会议控制通道（心跳、助手启停、事件广播） |
+| `/ws/asr?session_id=<sid>&sample_rate=16000` | 会议 ASR 流（`asr.volc.streaming: true` 时；二进制 float32 PCM） |
 
 主要事件：`asr_interim` · `asr_final` · `wakeword_detected` · `meeting_summary_ready` · `llm_response_ready` · `tts_started` · `tts_finished`
 

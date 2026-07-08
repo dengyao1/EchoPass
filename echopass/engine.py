@@ -409,6 +409,42 @@ class StreamingASREngine:
         self._volc_enable_ddc = cfg(
             "asr.volc.enable_ddc", "SPEAKER_VOLC_ASR_ENABLE_DDC", True, to_bool,
         )
+        self._volc_streaming = cfg(
+            "asr.volc.streaming",
+            "SPEAKER_VOLC_STREAMING",
+            False,
+            to_bool,
+        )
+        self._volc_end_window_size = cfg(
+            "asr.volc.end_window_size",
+            "SPEAKER_VOLC_END_WINDOW_SIZE",
+            800,
+            int,
+        )
+        self._volc_force_to_speech_time = cfg(
+            "asr.volc.force_to_speech_time",
+            "SPEAKER_VOLC_FORCE_TO_SPEECH_TIME",
+            1000,
+            int,
+        )
+        self._volc_stream_connect_timeout = cfg(
+            "asr.volc.stream_connect_timeout",
+            "SPEAKER_VOLC_STREAM_CONNECT_TIMEOUT",
+            10.0,
+            float,
+        )
+        self._volc_stream_recv_timeout = cfg(
+            "asr.volc.stream_recv_timeout",
+            "SPEAKER_VOLC_STREAM_RECV_TIMEOUT",
+            60.0,
+            float,
+        )
+        self._volc_show_utterances = cfg(
+            "asr.volc.show_utterances",
+            "SPEAKER_VOLC_SHOW_UTTERANCES",
+            True,
+            to_bool,
+        )
 
         # 高并发：不再用单把全局锁串行所有会议。改为「每 session 一把锁」避免同一会话
         # 多段 PCM 并发乱序；再用全局 BoundedSemaphore 限制进程内同时进行中的火山 WS 数。
@@ -450,6 +486,77 @@ class StreamingASREngine:
     def max_concurrent(self) -> int:
         """0 表示不限制进程内并发火山 ASR 调用数（不推荐生产）。"""
         return getattr(self, "_asr_max_concurrent", 0)
+
+    @property
+    def volc_streaming_enabled(self) -> bool:
+        return (
+            self._api == "bigmodel"
+            and bool(self._volc_streaming)
+        )
+
+    @property
+    def asr_streaming_enabled(self) -> bool:
+        return self.volc_streaming_enabled
+
+    @property
+    def volc_app_key(self) -> str:
+        return self._appid
+
+    @property
+    def volc_access_key(self) -> str:
+        return self._token
+
+    @property
+    def volc_resource_id(self) -> str:
+        return self._resource_id
+
+    @property
+    def volc_model_name(self) -> str:
+        return self._model_name
+
+    @property
+    def volc_uid(self) -> str:
+        return self._uid
+
+    @property
+    def volc_seg_ms(self) -> int:
+        return self._seg_ms
+
+    @property
+    def volc_enable_punc(self) -> bool:
+        return self._volc_enable_punc
+
+    @property
+    def volc_enable_nonstream(self) -> bool:
+        return self._volc_enable_nonstream
+
+    @property
+    def volc_enable_itn(self) -> bool:
+        return self._volc_enable_itn
+
+    @property
+    def volc_enable_ddc(self) -> bool:
+        return self._volc_enable_ddc
+
+    @property
+    def volc_end_window_size(self) -> int:
+        return self._volc_end_window_size
+
+    @property
+    def volc_force_to_speech_time(self) -> int:
+        return self._volc_force_to_speech_time
+
+    @property
+    def volc_stream_connect_timeout(self) -> float:
+        return self._volc_stream_connect_timeout
+
+    @property
+    def volc_stream_recv_timeout(self) -> float:
+        return self._volc_stream_recv_timeout
+
+    @property
+    def volc_show_utterances(self) -> bool:
+        return self._volc_show_utterances
 
     def _local_paths_ok(self) -> bool:
         """云端引擎永远不依赖本地权重。保留方法以兼容 /api/health。"""

@@ -149,12 +149,14 @@ from echopass.engine import (
 from echopass.agent.dialogue_manager import DialogueManager
 from echopass.agent.llm_client import LLMChatClient
 from echopass.agent.participants import ParticipantsRegistry
+from echopass.asr_stream_pool import AsrStreamPool
 from echopass.meeting.cross_meeting import CrossMeetingRef, CrossMeetingSummarizer
 from echopass.meeting.summarizer import MeetingSummarizer
 from echopass.meeting.transcript_buffer import TranscriptBuffer
 from echopass.session.manager import SessionManager
 from echopass.transport.schemas import event_message
 from echopass.transport.websocket_server import WebSocketHub
+from echopass.volc_bigmodel_stream import VolcBigmodelStreamingSession
 from echopass.config import cfg, config_path, to_bool
 
 SIM_THRESHOLD = cfg("speaker.threshold", "SPEAKER_DEMO_THRESHOLD", 0.45, float)
@@ -182,6 +184,7 @@ engine = CamPlusSpeakerEngine(
 _funasr_base = cfg("asr.funasr_base", "SPEAKER_FUNASR_BASE", "", str)
 FUNASR_BASE = Path(_funasr_base).resolve() if _funasr_base else (REPO_ROOT / "pretrained" / "funasr")
 asr_engine = StreamingASREngine(base_dir=FUNASR_BASE)
+asr_stream_pool = AsrStreamPool()
 
 # LLM：仓库不含密钥；在 config 或环境变量中填写 llm.api_url / api_key / model。
 _llm_url   = cfg("llm.api_url", "SPEAKER_LLM_API_URL", "", str)
@@ -545,6 +548,121 @@ def _apply_participants_filter(
     return new_spk, top_score, filtered
 
 
+async def _finalize_stream_utterance(
+    *,
+    session_id: str,
+    text_raw: str,
+    start_ms: int,
+    end_ms: int,
+    pcm_16k: np.ndarray,
+    threshold: float,
+    hotword: Optional[str] = None,
+) -> None:
+    """火山流式 definite utterance：声纹识别、写转写缓冲并广播 WS 事件。"""
+    text_raw = (text_raw or "").strip()
+    if not text_raw:
+        return
+
+    sid = _normalize_session_id(session_id)
+    th = threshold
+    duration_sec = float(pcm_16k.size) / 16000.0 if pcm_16k.size else 0.0
+    if end_ms <= start_ms and pcm_16k.size:
+        end_ms = start_ms + int(round(duration_sec * 1000))
+
+    loop = asyncio.get_running_loop()
+    try:
+        emb = await loop.run_in_executor(
+            None,
+            lambda: engine.embedding_from_pcm_float32(pcm_16k, 16000),
+        )
+        spk, best, scores = await loop.run_in_executor(
+            None,
+            lambda: engine.identify(emb, th),
+        )
+    except ValueError:
+        logger.warning("流式 utterance 声纹 embedding 失败 session=%s", sid)
+        return
+
+    spk, best, scores = _apply_participants_filter(sid, spk, best, scores, th)
+    hw = (hotword or _asr_hotword_env or "").strip() or None
+
+    top_str = ", ".join(f"{n}={s:.3f}" for n, s in scores[:3])
+    logger.info(
+        "ASR [%s] speaker=%s score=%.3f top=[%s] hotword=%s text=%s",
+        sid,
+        spk or "未知",
+        float(best),
+        top_str or "-",
+        (hw or "-"),
+        text_raw,
+    )
+
+    text_final = text_raw
+    corrected = False
+    if _asr_llm_correction and llm_corrector and text_raw.strip():
+        try:
+            text_final = await llm_corrector.correct(
+                text_raw, context=spk or "未知说话人",
+            )
+            corrected = True
+        except Exception:
+            text_final = text_raw
+
+    transcript_buffer.append(
+        session_id=sid,
+        speaker=spk or "未知说话人",
+        text=text_final,
+        text_raw=text_raw,
+        llm_corrected=corrected,
+        start_ms=start_ms,
+        end_ms=end_ms,
+        duration_sec=duration_sec,
+    )
+    await emit_event(
+        "asr_final",
+        session_id=sid,
+        payload={
+            "speaker": spk or "未知说话人",
+            "text": text_final,
+            "text_raw": text_raw,
+            "llm_corrected": corrected,
+            "score": float(best),
+            "start_ms": start_ms,
+            "end_ms": end_ms,
+            "duration_sec": duration_sec,
+        },
+    )
+
+
+def _resample_pcm16k(pcm: np.ndarray, sample_rate: int) -> np.ndarray:
+    if sample_rate == 16000:
+        return np.asarray(pcm, dtype=np.float32).reshape(-1)
+    wav_t = torch.from_numpy(np.asarray(pcm, dtype=np.float32).reshape(-1))
+    return torchaudio.functional.resample(wav_t, sample_rate, 16000).numpy()
+
+
+def _build_volc_stream(hotword: Optional[str]) -> VolcBigmodelStreamingSession:
+    asr_engine._ensure_model()
+    return VolcBigmodelStreamingSession(
+        app_key=asr_engine.volc_app_key,
+        access_key=asr_engine.volc_access_key,
+        resource_id=asr_engine.volc_resource_id,
+        ws_url=asr_engine.ws_url,
+        model_name=asr_engine.volc_model_name,
+        uid=asr_engine.volc_uid,
+        seg_duration_ms=asr_engine.volc_seg_ms,
+        enable_punc=asr_engine.volc_enable_punc,
+        enable_nonstream=asr_engine.volc_enable_nonstream,
+        enable_itn=asr_engine.volc_enable_itn,
+        enable_ddc=asr_engine.volc_enable_ddc,
+        show_utterances=asr_engine.volc_show_utterances,
+        end_window_size=asr_engine.volc_end_window_size,
+        force_to_speech_time=asr_engine.volc_force_to_speech_time,
+        connect_timeout=asr_engine.volc_stream_connect_timeout,
+        recv_timeout=asr_engine.volc_stream_recv_timeout,
+    )
+
+
 def _build_meeting_context(session_id: str) -> str:
     """取 transcript_buffer 里最近的若干条发言，拼成可读的上下文喂给 LLM。"""
     items = transcript_buffer.list_items(session_id)
@@ -571,7 +689,8 @@ def health():
         "ok": True,
         "model_ready": engine._model is not None,
         "asr_ready": asr_engine._model is not None,
-        "asr_provider": "volcengine",
+        "asr_provider": asr_engine.provider,
+        "asr_streaming": asr_engine.asr_streaming_enabled,
         "asr_ws_url": asr_engine.ws_url,
         "asr_max_concurrent": getattr(asr_engine, "max_concurrent", 0),
         # 兼容保留（前端 status lamp 仍引用这两个字段）：云端引擎下值固定
@@ -646,6 +765,141 @@ async def ws_control(websocket: WebSocket, session_id: str = "default"):
         logger.exception("/ws/control 未预期异常 session_id=%s", sid)
     finally:
         await ws_hub.disconnect(websocket, session_id=sid)
+
+
+@app.websocket("/ws/asr")
+async def ws_asr_stream(
+    websocket: WebSocket,
+    session_id: str = "default",
+    sample_rate: int = 16000,
+    threshold: Optional[float] = None,
+    hotword: Optional[str] = None,
+):
+    """会议录音 ASR 长连接：浏览器持续送 PCM，火山云端 VAD 产出 definite utterances。"""
+    if not asr_engine.asr_streaming_enabled:
+        await websocket.close(code=4403, reason="ASR streaming disabled")
+        return
+
+    sid = _normalize_session_id(session_id)
+    _touch_session(sid)
+    th = threshold if threshold is not None else SIM_THRESHOLD
+    hw = (hotword or _asr_hotword_env or "").strip() or None
+    sr = max(8000, int(sample_rate or 16000))
+
+    await websocket.accept()
+    try:
+        stream = _build_volc_stream(hw)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("创建 ASR 流式会话失败 session_id=%s", sid)
+        await websocket.close(code=4500, reason=str(exc))
+        return
+
+    async def _on_partial(partial: str, payload: dict) -> None:
+        await emit_event(
+            "asr_interim",
+            session_id=sid,
+            payload={
+                "text": partial,
+                "text_raw": partial,
+                "partial_start_ms": int(payload.get("partial_start_ms") or 0),
+                "is_final": False,
+            },
+        )
+
+    async def _on_sentence(meta: dict, pcm_slice: np.ndarray) -> None:
+        text = str(meta.get("text") or "").strip()
+        if not text:
+            return
+        start_ms = int(meta.get("start_ms") or 0)
+        end_ms = int(meta.get("end_ms") or 0)
+        try:
+            await _finalize_stream_utterance(
+                session_id=sid,
+                text_raw=text,
+                start_ms=start_ms,
+                end_ms=end_ms,
+                pcm_16k=pcm_slice,
+                threshold=th,
+                hotword=hw,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "流式句级声纹识别失败 session=%s text=%s",
+                sid,
+                text[:80],
+            )
+
+    stream.set_callbacks(on_partial=_on_partial, on_sentence=_on_sentence)
+
+    try:
+        await asr_stream_pool.replace(sid, stream)
+        try:
+            await stream.start(hotword=hw)
+        except (OSError, ConnectionError, TimeoutError) as exc:
+            logger.error(
+                "/ws/asr 无法连接 ASR 后端 session_id=%s url=%s: %s",
+                sid,
+                asr_engine.ws_url,
+                exc,
+            )
+            await websocket.close(
+                code=4502,
+                reason=f"ASR backend unreachable: {exc}",
+            )
+            return
+        await websocket.send_json(
+            event_message(
+                event_type="asr_stream_started",
+                session_id=sid,
+                payload={"provider": asr_engine.provider, "sample_rate": sr},
+            )
+        )
+
+        while True:
+            msg = await websocket.receive()
+            if msg.get("type") == "websocket.disconnect":
+                break
+            if msg.get("type") != "websocket.receive":
+                continue
+
+            data = msg.get("bytes")
+            if data:
+                if len(data) < 64 or len(data) % 4 != 0:
+                    continue
+                pcm = np.frombuffer(data, dtype=np.float32)
+                pcm_16k = _resample_pcm16k(pcm, sr)
+                await stream.feed_pcm16k(pcm_16k)
+                continue
+
+            text = msg.get("text")
+            if not text:
+                continue
+            try:
+                payload = json.loads(text)
+            except json.JSONDecodeError:
+                continue
+            cmd = str(payload.get("cmd") or payload.get("command") or "").strip().lower()
+            if cmd in ("stop", "close"):
+                break
+            if cmd == "ping":
+                await websocket.send_json(event_message("pong", session_id=sid, payload={"ok": True}))
+
+    except WebSocketDisconnect:
+        pass
+    except Exception:  # noqa: BLE001
+        logger.exception("/ws/asr 未预期异常 session_id=%s", sid)
+    finally:
+        try:
+            await stream.stop()
+        except Exception:  # noqa: BLE001
+            await stream.close()
+        await asr_stream_pool.close_session(sid)
+        try:
+            await websocket.send_json(
+                event_message("asr_stream_stopped", session_id=sid, payload={"ok": True}),
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
 
 @app.get("/api/speakers")
@@ -835,13 +1089,14 @@ async def recognize_pcm(
 
 
 @app.post("/api/asr_reset")
-def asr_reset(session_id: str = "default"):
+async def asr_reset(session_id: str = "default"):
     """重置 ASR 流式 session（开始新一轮对话时调用）。
 
     同一场会议在录音/暂停切换时会反复 reset，因此 **不** 在这里清空参与者白名单；
     白名单生命周期跟随 ``session_manager.stop`` 或 ``/api/meeting/sessions/stop``。
     """
     sid = _normalize_session_id(session_id)
+    await asr_stream_pool.close_session(sid)
     asr_engine.reset_session(sid)
     transcript_buffer.clear(sid)
     dialogue_manager.stop(sid)
